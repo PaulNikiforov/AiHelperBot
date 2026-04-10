@@ -1,0 +1,242 @@
+databaseChangeLog:
+  - changeSet:
+      id: 002-create-tenant-table
+      author: migrations
+      changes:
+        - createTable:
+            tableName: tenant
+            columns:
+              - column:
+                  name: id
+                  type: UUID
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: name
+                  type: VARCHAR(100)
+                  constraints:
+                    nullable: false
+                    unique: true
+              - column:
+                  name: display_name
+                  type: VARCHAR(255)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: config_json
+                  type: JSONB
+                  constraints:
+                    nullable: false
+              - column:
+                  name: is_active
+                  type: BOOLEAN
+                  defaultValueBoolean: true
+                  constraints:
+                    nullable: false
+              - column:
+                  name: created_at
+                  type: TIMESTAMP
+                  defaultValueComputed: CURRENT_TIMESTAMP
+                  constraints:
+                    nullable: false
+              - column:
+                  name: updated_at
+                  type: TIMESTAMP
+                  defaultValueComputed: CURRENT_TIMESTAMP
+                  constraints:
+                    nullable: false
+
+  - changeSet:
+      id: 003-create-api-key-table
+      author: migrations
+      changes:
+        - createTable:
+            tableName: api_key
+            columns:
+              - column:
+                  name: id
+                  type: UUID
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: tenant_id
+                  type: UUID
+                  constraints:
+                    nullable: false
+                    foreignKeyName: fk_api_key_tenant
+                    referencedTableName: tenant
+                    referencedColumnNames: id
+              - column:
+                  name: name
+                  type: VARCHAR(100)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: key_hash
+                  type: VARCHAR(64)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: key_prefix
+                  type: VARCHAR(12)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: rate_limit_rpm
+                  type: INT
+                  defaultValueNumeric: 100
+                  constraints:
+                    nullable: false
+              - column:
+                  name: is_active
+                  type: BOOLEAN
+                  defaultValueBoolean: true
+                  constraints:
+                    nullable: false
+              - column:
+                  name: created_at
+                  type: TIMESTAMP
+                  defaultValueComputed: CURRENT_TIMESTAMP
+                  constraints:
+                    nullable: false
+              - column:
+                  name: last_used_at
+                  type: TIMESTAMP
+
+  - changeSet:
+      id: 004-create-document-source-table
+      author: migrations
+      changes:
+        - createTable:
+            tableName: document_source
+            columns:
+              - column:
+                  name: id
+                  type: UUID
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: tenant_id
+                  type: UUID
+                  constraints:
+                    nullable: false
+                    foreignKeyName: fk_document_source_tenant
+                    referencedTableName: tenant
+                    referencedColumnNames: id
+              - column:
+                  name: name
+                  type: VARCHAR(255)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: blob_path
+                  type: VARCHAR(500)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: content_hash
+                  type: VARCHAR(64)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: chunk_size
+                  type: INT
+                  constraints:
+                    nullable: false
+              - column:
+                  name: overlap
+                  type: INT
+                  constraints:
+                    nullable: false
+              - column:
+                  name: chunk_count
+                  type: INT
+                  constraints:
+                    nullable: false
+              - column:
+                  name: status
+                  type: VARCHAR(20)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: indexed_at
+                  type: TIMESTAMP
+              - column:
+                  name: created_at
+                  type: TIMESTAMP
+                  defaultValueComputed: CURRENT_TIMESTAMP
+                  constraints:
+                    nullable: false
+
+  - changeSet:
+      id: 005-create-question-log-seq
+      author: migrations
+      changes:
+        - createSequence:
+            sequenceName: question_log_seq
+            startValue: 1
+            incrementBy: 50
+
+  - changeSet:
+      id: 006-create-question-log-table
+      author: migrations
+      changes:
+        - createTable:
+            tableName: question_log
+            columns:
+              - column:
+                  name: id
+                  type: BIGINT
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: tenant_id
+                  type: UUID
+                  constraints:
+                    nullable: false
+                    foreignKeyName: fk_question_log_tenant
+                    referencedTableName: tenant
+                    referencedColumnNames: id
+              - column:
+                  name: question
+                  type: TEXT
+                  constraints:
+                    nullable: false
+              - column:
+                  name: answer
+                  type: TEXT
+              - column:
+                  name: query_type
+                  type: VARCHAR(50)
+              - column:
+                  name: llm_provider
+                  type: VARCHAR(50)
+              - column:
+                  name: validation_result
+                  type: VARCHAR(20)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: rejection_reason
+                  type: VARCHAR(255)
+              - column:
+                  name: latency_ms
+                  type: INT
+                  constraints:
+                    nullable: false
+              - column:
+                  name: tokens_prompt
+                  type: INT
+              - column:
+                  name: tokens_completion
+                  type: INT
+              - column:
+                  name: created_at
+                  type: TIMESTAMP
+                  defaultValueComputed: CURRENT_TIMESTAMP
+                  constraints:
+                    nullable: false

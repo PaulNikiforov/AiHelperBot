@@ -1,0 +1,317 @@
+openapi: 3.1.0
+
+info:
+  title: AiHelperBot API
+  description: >
+    Internal AI-powered helpdesk API that answers employee questions about
+    organizational processes using Retrieval-Augmented Generation (RAG).
+  version: 2.0.0
+  contact:
+    name: Solbeg SAS Team
+
+servers:
+  - url: http://localhost:8080
+    description: Local development
+
+security:
+  - ApiKeyAuth: []
+
+paths:
+  /api/v1/ask:
+    post:
+      operationId: askQuestion
+      summary: Ask a question (synchronous)
+      tags: [Question]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AskRequest'
+      responses:
+        '200':
+          description: Successful answer
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AskResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Missing or invalid API key
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: LLM unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Unexpected server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/ask/stream:
+    post:
+      operationId: askQuestionStream
+      summary: Ask a question (streaming SSE)
+      tags: [Question]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AskRequest'
+      responses:
+        '200':
+          description: SSE stream of answer tokens
+          content:
+            text/event-stream:
+              schema:
+                $ref: '#/components/schemas/StreamToken'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Missing or invalid API key
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: LLM unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Unexpected server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/botfeedback:
+    post:
+      operationId: saveFeedback
+      summary: Save feedback on a bot answer
+      tags: [Feedback]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FeedbackRequest'
+      responses:
+        '201':
+          description: Feedback saved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FeedbackResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Missing or invalid API key
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Unexpected server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/botfeedback/{id}:
+    get:
+      operationId: getFeedback
+      summary: Get feedback by ID
+      tags: [Feedback]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: Feedback found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FeedbackResponse'
+        '404':
+          description: Feedback not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Missing or invalid API key
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Unexpected server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/bot/intro:
+    get:
+      operationId: getBotIntro
+      summary: Get bot intro text
+      tags: [Bot]
+      responses:
+        '200':
+          description: Bot intro text
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IntroResponse'
+        '401':
+          description: Missing or invalid API key
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Unexpected server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+
+  schemas:
+    AskRequest:
+      type: object
+      required: [question]
+      properties:
+        question:
+          type: string
+          minLength: 1
+          maxLength: 4000
+
+    AskResponse:
+      type: object
+      properties:
+        answer:
+          type: string
+
+    StreamToken:
+      type: object
+      properties:
+        token:
+          type: string
+        done:
+          type: boolean
+          default: false
+        usage:
+          $ref: '#/components/schemas/TokenUsage'
+
+    TokenUsage:
+      type: object
+      properties:
+        promptTokens:
+          type: integer
+        completionTokens:
+          type: integer
+
+    FeedbackRequest:
+      type: object
+      required: [question, answer, botFeedbackType]
+      properties:
+        question:
+          type: string
+          maxLength: 4000
+        answer:
+          type: string
+          maxLength: 10000
+        botFeedbackType:
+          type: string
+          enum: [LIKE, DISLIKE]
+
+    FeedbackResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        question:
+          type: string
+        answer:
+          type: string
+        botFeedbackType:
+          type: string
+          enum: [LIKE, DISLIKE]
+        employeeEmail:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+
+    IntroResponse:
+      type: object
+      properties:
+        introText:
+          type: string
+
+    ErrorCode:
+      type: string
+      enum:
+        - VALIDATION_FAILED
+        - UNAUTHORIZED
+        - "300000"
+        - RATE_LIMIT_EXCEEDED
+        - LLM_ERROR
+        - INTERNAL_ERROR
+
+    ErrorResponse:
+      type: object
+      properties:
+        errorCode:
+          $ref: '#/components/schemas/ErrorCode'
+        message:
+          type: string
+      required: [errorCode, message]

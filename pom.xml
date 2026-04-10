@@ -9,8 +9,8 @@
         <relativePath/>
     </parent>
 
-    <groupId>com.solbeg.sas</groupId>
-    <artifactId>ai-helper-bot</artifactId>
+    <groupId>com.nikiforov</groupId>
+    <artifactId>aichatbot</artifactId>
     <version>0.0.1-SNAPSHOT</version>
     <name>ai-helper-bot</name>
     <description>SAS AI Helper Bot — extracted RAG/LLM service</description>
@@ -159,6 +159,11 @@
         <dependency>
             <groupId>org.testcontainers</groupId>
             <artifactId>postgresql</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-testcontainers</artifactId>
             <scope>test</scope>
         </dependency>
         <dependency>

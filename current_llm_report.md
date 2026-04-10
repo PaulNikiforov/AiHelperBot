@@ -101,7 +101,7 @@ The model `nomic-embed-text` must already be pulled in Ollama before the app sta
 
 ### `LlmProperties` — `config/properties/LlmProperties.java`
 
-Bound under prefix `solbeg.rag.llm`:
+Bound under prefix `rag.llm`:
 
 | Field | Type | Purpose |
 |---|---|---|
@@ -117,17 +117,16 @@ Bound under prefix `solbeg.rag.llm`:
 ### `application.yml` values
 
 ```yaml
-solbeg:
-  rag:
-    llm:
-      base-url: ${LLM_BASE_URL:http://10.77.64.113:8081}   # env var
-      api-key:  ${OPEN_ROUTER_API_KEY:}                             # env var, no default
-      user-id:  ${LLM_USER_ID:chatbotai@solbeg.com}
-      guide-url: ${LLM_GUIDE_URL:}                          # env var, no default
-      vector-store-path: /tmp/sas-rag/vectorstore.bin
-      mode: external
-      model-name: ""
-      max-documents: 5
+rag:
+  llm:
+    base-url: ${LLM_BASE_URL:http://10.77.64.113:8081}
+    api-key:  ${OPEN_ROUTER_API_KEY:}
+    user-id:  ${LLM_USER_ID:chatbotai@example.com}
+    guide-url: ${LLM_GUIDE_URL:}
+    vector-store-path: /tmp/sas-rag/vectorstore.bin
+    mode: external
+    model-name: ""
+    max-documents: 5
 ```
 
 Environment variables that must be set in production:

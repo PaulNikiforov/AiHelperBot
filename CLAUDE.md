@@ -137,7 +137,7 @@ instead of `/tmp`.
 
 This is a Spring Boot 3.2.5 / Java 17 RAG (Retrieval-Augmented Generation) service for a Performance Management chatbot. It answers user questions by retrieving relevant chunks from a PDF user guide and sending a composed prompt to an external LLM API.
 
-**Root package**: `com.solbeg.sas.perfmgmnt`
+**Root package**: `com.nikiforov.aichatbot`
 
 ### REST API
 
@@ -146,7 +146,7 @@ This is a Spring Boot 3.2.5 / Java 17 RAG (Retrieval-Augmented Generation) servi
 | POST | `/api/v1/ask` | `BotQueryController` | Ask a question; returns LLM answer |
 | POST | `/api/v1/botfeedback` | `BotFeedbackController` | Save thumbs-up/down feedback |
 | GET | `/api/v1/botfeedback/{id}` | `BotFeedbackController` | Retrieve feedback by ID |
-| GET | `/api/v1/bot/topics` | `BotTopicsController` | Get bot intro text and topic list |
+| GET | `/api/v1/bot/topics` | `BotTopicsController` | Get bot intro text |
 
 Security: CSRF disabled, all endpoints permit all (no authentication required). Authenticated user email is read from `SecurityContextHolder` by `SecurityUtils` when saving feedback.
 
@@ -229,27 +229,26 @@ All subsequent queries hit the **in-memory** `CustomSimpleVectorStore` (extends 
 | `employee_email` | VARCHAR(255) | nullable |
 | `created_at` | TIMESTAMP | DB-generated default `CURRENT_TIMESTAMP`, read-only |
 
-`BotFeedbackService` truncates answers to 10,000 chars before saving.
+`BotFeedbackService` truncates answers to 10,000 chars in `save()` as a defensive guard. DTO validation (`@Size(max=10000)`) rejects oversized input at the API boundary.
 
 ### Key Configuration
 
-Config prefix is `solbeg.rag` for RAG properties and `solbeg.bot` for bot properties.
+Config prefix is `rag` for RAG properties and `bot` for bot properties.
 
 | Property | Purpose |
 |---|---|
-| `solbeg.rag.storage.blob.url` | Azure Blob Storage connection string |
-| `solbeg.rag.llm.base-url` | External LLM API base URL |
-| `solbeg.rag.llm.api-key` | LLM API key |
-| `solbeg.rag.llm.guide-url` | PDF guide URL passed in LLM request payload |
-| `solbeg.rag.llm.mode` | `external` or `internal` |
-| `solbeg.rag.llm.max-documents` | Max docs passed to prompt (default 5) |
-| `solbeg.rag.guide.chunk-size` / `overlap` | PDF chunking parameters — changing triggers auto-reindex |
-| `solbeg.rag.guide.pages.*` | Page offsets into the PDF used by type-specific retrieval strategies |
-| `solbeg.rag.validation.quick-filter.min-length` | Min input length (default 2) |
-| `solbeg.rag.validation.language-detector.*` | Language detection thresholds |
-| `solbeg.rag.validation.domain-checker.*` | Domain relevance thresholds |
-| `solbeg.bot.intro-text` | Bot greeting text |
-| `solbeg.bot.topics` | List of topics shown to users |
+| `rag.storage.blob.url` | Azure Blob Storage connection string |
+| `rag.llm.base-url` | External LLM API base URL |
+| `rag.llm.api-key` | LLM API key |
+| `rag.llm.guide-url` | PDF guide URL passed in LLM request payload |
+| `rag.llm.mode` | `external` or `internal` |
+| `rag.llm.max-documents` | Max docs passed to prompt (default 5) |
+| `rag.guide.chunk-size` / `overlap` | PDF chunking parameters — changing triggers auto-reindex |
+| `rag.guide.pages.*` | Page offsets into the PDF used by type-specific retrieval strategies |
+| `rag.validation.quick-filter.min-length` | Min input length (default 2) |
+| `rag.validation.language-detector.*` | Language detection thresholds |
+| `rag.validation.domain-checker.*` | Domain relevance thresholds |
+| `bot.intro-text` | Bot greeting text |
 | `spring.liquibase.change-log` | Liquibase master changelog path |
 
 # Security Rules
