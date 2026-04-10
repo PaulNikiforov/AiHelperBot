@@ -52,6 +52,11 @@ rag:
       enabled: true
       default-rpm: 100
 
+app:
+  adapters:
+    inbound:
+      enabled: true           # false = Phase 6 adapters dormant, old controllers serve traffic
+
 management:
   endpoints:
     web:

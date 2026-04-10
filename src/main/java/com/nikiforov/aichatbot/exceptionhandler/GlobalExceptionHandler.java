@@ -1,5 +1,7 @@
 package com.nikiforov.aichatbot.exceptionhandler;
 
+import com.nikiforov.aichatbot.domain.exception.FeedbackNotFoundException;
+import com.nikiforov.aichatbot.domain.exception.LlmUnavailableException;
 import com.nikiforov.aichatbot.exceptionhandler.exception.CodedException;
 import com.nikiforov.aichatbot.exceptionhandler.exception.LlmException;
 import lombok.extern.slf4j.Slf4j;
@@ -37,9 +39,27 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(body);
     }
 
+    @ExceptionHandler(FeedbackNotFoundException.class)
+    public ResponseEntity<Map<String, Object>> handleFeedbackNotFound(FeedbackNotFoundException ex) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put(ERROR_CODE, "300000");
+        body.put(MESSAGE, ex.getMessage());
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(body);
+    }
+
+    @ExceptionHandler(LlmUnavailableException.class)
+    public ResponseEntity<Map<String, Object>> handleLlmUnavailable(LlmUnavailableException ex) {
+        log.error("LLM unavailable: {}", ex.getMessage());
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put(ERROR_CODE, "LLM_ERROR");
+        body.put(MESSAGE, "AI service temporarily unavailable");
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(body);
+    }
+
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<Map<String, Object>> handleValidation(MethodArgumentNotValidException ex) {
         Map<String, Object> body = new LinkedHashMap<>();
+        body.put(ERROR_CODE, "VALIDATION_FAILED");
         body.put(MESSAGE, "Validation failed");
         body.put("errors", ex.getBindingResult().getFieldErrors().stream()
                 .map(fe -> fe.getField() + ": " + fe.getDefaultMessage())
@@ -51,6 +71,7 @@ public class GlobalExceptionHandler {
     public ResponseEntity<Map<String, Object>> handleGeneric(Exception ex) {
         log.error("Unexpected error", ex);
         Map<String, Object> body = new LinkedHashMap<>();
+        body.put(ERROR_CODE, "INTERNAL_ERROR");
         body.put(MESSAGE, "Internal server error");
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(body);
     }

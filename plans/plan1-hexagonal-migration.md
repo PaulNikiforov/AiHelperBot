@@ -398,61 +398,73 @@
 
 ---
 
-## Phase 6: Inbound Adapters (REST controllers)
+## Phase 6: Inbound Adapters (REST controllers) — COMPLETE
 
 *Rewire controllers to call inbound ports instead of directly calling service implementations.*
 
-### Step 6.1 — Create web DTOs in adapter layer
-- Create `adapter/in/web/dto/AskRequest.java` — record with `question` field, validation annotations
-- Create `adapter/in/web/dto/AskResponse.java` — record with `answer` field
-- Create `adapter/in/web/dto/FeedbackRequest.java` — record with `question`, `answer`, `botFeedbackType`
-- Create `adapter/in/web/dto/FeedbackResponse.java` — record with all feedback fields
-- Create `adapter/in/web/dto/IntroResponse.java` — record with `introText`
+**Status**: All 9 steps implemented + review fixes applied. 86 tests pass (12 new adapter tests).
 
-### Step 6.2 — Create web mappers
-- Create `adapter/in/web/mapper/QuestionWebMapper.java` — maps `AskRequest` to domain `Question`
-- Create `adapter/in/web/mapper/FeedbackWebMapper.java` — maps between web DTOs and domain models
+### Conditional activation
 
-### Step 6.3 — Write tests for BotQueryController adapter (RED)
-- Create `adapter/in/web/BotQueryControllerTest.java`
-- Mock `AskQuestionUseCase` port
-- Test: POST /api/v1/ask with valid question returns 200 with answer
-- Test: POST with blank question returns 400
-- Test: LLM unavailable returns 503
+All new inbound adapters use `@ConditionalOnProperty(name = "app.adapters.inbound.enabled", havingValue = "true")`. This prevents the Spring context from loading them until Phase 7 wires the port implementations as beans. The old controllers continue serving requests until Phase 10 (cutover).
 
-### Step 6.4 — Create BotQueryController adapter (GREEN)
-- Create `adapter/in/web/BotQueryController.java`
-- Injects `AskQuestionUseCase` (port interface, not `RagService`)
-- Maps request to domain `Question`, calls `ask()`, maps `Answer` to response
+Adapter tests use `@TestPropertySource(properties = "app.adapters.inbound.enabled=true")` to activate the beans under test.
 
-### Step 6.5 — Write tests for BotFeedbackController adapter (RED)
-- Create `adapter/in/web/BotFeedbackControllerTest.java`
-- Mock `SaveFeedbackUseCase` and `GetFeedbackUseCase` ports
-- Test: POST /api/v1/botfeedback returns 201
-- Test: GET /api/v1/botfeedback/{id} returns 200
-- Test: GET non-existent returns 404
+### Step 6.1 — Create web DTOs in adapter layer ✅
+- `adapter/in/web/dto/AskRequest.java` — record with `@NotBlank` + `@Size(max=4000) question`
+- `adapter/in/web/dto/AskResponse.java` — record with `answer`
+- `adapter/in/web/dto/FeedbackRequest.java` — record with `question` (`@NotBlank`, `@Size(max=4000)`), `answer` (`@NotBlank`, `@Size(max=10000)`), `botFeedbackType` (domain `FeedbackType`, `@NotNull`)
+- `adapter/in/web/dto/FeedbackResponse.java` — record with `Instant createdAt` (not `LocalDateTime`)
+- `adapter/in/web/dto/IntroResponse.java` — record with `introText`
 
-### Step 6.6 — Create BotFeedbackController adapter (GREEN)
-- Create `adapter/in/web/BotFeedbackController.java`
-- Injects `SaveFeedbackUseCase` and `GetFeedbackUseCase`
-- Maps between web DTOs and domain models
+### Step 6.2 — Create web mappers ✅
+- `adapter/in/web/mapper/QuestionWebMapper.java` — MapStruct `@Mapper(componentModel = "spring")`, maps `AskRequest` → `Question`, `Answer` → `AskResponse`
+- `adapter/in/web/mapper/FeedbackWebMapper.java` — MapStruct, maps `Feedback` → `FeedbackResponse` (unwraps `FeedbackId.value`, maps `type` → `botFeedbackType`)
 
-### Step 6.7 — Write tests for BotIntroController adapter (RED)
-- Create `adapter/in/web/BotIntroControllerTest.java`
-- Mock `GetBotIntroUseCase`
-- Test: GET /api/v1/bot/intro returns 200 with intro text
+### Step 6.3 — Write tests for BotQueryControllerAdapter (RED) ✅
+- `BotQueryControllerAdapterTest.java` — `@WebMvcTest` + `@MockBean` for port + mapper
+- Tests: valid question → 200, blank/null → 400, LLM unavailable → 503
 
-### Step 6.8 — Create BotIntroController adapter (GREEN)
-- Create `adapter/in/web/BotIntroController.java`
+### Step 6.4 — Create BotQueryControllerAdapter (GREEN) ✅
+- `adapter/in/web/BotQueryControllerAdapter.java`
+- Injects `AskQuestionUseCase` + `QuestionWebMapper`
+- Maps `AskRequest` → `Question` → call `ask()` → `AskResponse`
+
+### Step 6.5 — Write tests for BotFeedbackControllerAdapter (RED) ✅
+- `BotFeedbackControllerAdapterTest.java` — `@WebMvcTest` + `@MockBean` for ports, mapper, `IdentityProviderPort`
+- Tests: valid POST → 201, blank question → 400, blank answer → 400, null botFeedbackType → 400, GET existing → 200, GET missing → 404
+- All validation tests assert `errorCode: "VALIDATION_FAILED"` in response body
+
+### Step 6.6 — Create BotFeedbackControllerAdapter (GREEN) ✅
+- `adapter/in/web/BotFeedbackControllerAdapter.java`
+- Injects `SaveFeedbackUseCase`, `GetFeedbackUseCase`, `FeedbackWebMapper`, `IdentityProviderPort`
+- POST: gets email from `IdentityProviderPort.getCurrentUserEmail()`, calls `save()`, maps to `FeedbackResponse`
+- GET: wraps `Long` in `FeedbackId`, calls `getById()`, maps to `FeedbackResponse`
+
+### Step 6.7 — Write tests for BotIntroControllerAdapter (RED) ✅
+- `BotIntroControllerAdapterTest.java` — `@WebMvcTest` + `@MockBean` for `GetBotIntroUseCase`
+- Tests: GET /api/v1/bot/intro → 200 with introText; null return → 200 with empty introText
+
+### Step 6.8 — Create BotIntroControllerAdapter (GREEN) ✅
+- `adapter/in/web/BotIntroControllerAdapter.java`
 - Injects `GetBotIntroUseCase`
-- Maps to `IntroResponse`
+- Maps result to `IntroResponse`
 
-### Step 6.9 — Update GlobalExceptionHandler
-- Move to `adapter/in/web/GlobalExceptionHandler.java`
-- Add mapping for `FeedbackNotFoundException` to 404
-- Add mapping for `LlmUnavailableException` to 503
-- Keep existing mappings for validation errors and generic exceptions
-- Ensure exception to HTTP status mapping is consistent with spec error codes
+### Step 6.9 — Update GlobalExceptionHandler ✅
+- Added `@ExceptionHandler(FeedbackNotFoundException.class)` → 404 with `errorCode: "300000"`
+- Added `@ExceptionHandler(LlmUnavailableException.class)` → 503 with `errorCode: "LLM_ERROR"`
+- All error responses include `errorCode` + `message` fields per spec
+- Validation errors (400) return `errorCode: "VALIDATION_FAILED"`, generic errors (500) return `errorCode: "INTERNAL_ERROR"`
+- Did NOT move to `adapter/in/web/` — stays in `exceptionhandler/` package until Phase 10 cutover
+
+### Step 6.10 — Code review fixes ✅
+- Extracted `port/out/IdentityProviderPort` interface + `adapter/out/security/SpringSecurityIdentityAdapter` — removes `service.*` dependency from adapter/in
+- Added `@Size(max=4000)` to `AskRequest.question`
+- Removed redundant `@Mapping` from `FeedbackWebMapper` (only `id.value` and `type→botFeedbackType` needed)
+- Removed unnecessary `@Validated` from `BotFeedbackControllerAdapter`
+- Aligned `@Tag` names with OpenAPI: `Question`, `Feedback`, `Bot`
+- Added `errorCode` assertions to all validation error tests
+- Added validation edge case tests (blank answer, null botFeedbackType, null intro text)
 
 ---
 
@@ -468,12 +480,17 @@
 - Reads intro text from `BotProperties` configuration
 - This is the only case where a domain use case reads directly from config — wire through a simple adapter
 
-### Step 7.3 — Update existing controller endpoint paths
+### Step 7.3 — Enable inbound adapters
+- Set `app.adapters.inbound.enabled=true` in `application.yml`
+- This activates the Phase 6 `@ConditionalOnProperty` on `BotQueryControllerAdapter`, `BotFeedbackControllerAdapter`, `BotIntroControllerAdapter`
+- Remove the `@ConditionalOnProperty` annotations once old controllers are removed in Phase 10
+
+### Step 7.4 — Update existing controller endpoint paths
 - The existing `BotTopicsController` served `/api/v1/bot/topics`
-- The new `BotIntroController` serves `/api/v1/bot/intro` per spec
+- The new `BotIntroControllerAdapter` serves `/api/v1/bot/intro` per spec
 - Ensure path matches spec; decide on backward compatibility
 
-### Step 7.4 — Verify compilation
+### Step 7.5 — Verify compilation
 - Run `mvnw compile`
 - Both old and new packages coexist temporarily
 - No old code is deleted yet

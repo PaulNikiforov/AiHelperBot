@@ -156,6 +156,14 @@ public interface TenantConfigPort {
 }
 ```
 
+#### IdentityProviderPort
+
+```java
+public interface IdentityProviderPort {
+    String getCurrentUserEmail();
+}
+```
+
 ---
 
 ## 7. Adapters
@@ -184,9 +192,19 @@ The web adapter translates HTTP requests into use case calls and domain results 
 
 **Key constraint:** Controllers MUST NOT contain business logic. They only translate, delegate, and map.
 
+**Phased activation:** All inbound adapters use `@ConditionalOnProperty(name = "app.adapters.inbound.enabled", havingValue = "true")`. They remain dormant until Phase 7 wires the port implementations as Spring beans. Old controllers continue serving traffic until Phase 10 cutover.
+
+**Implemented inbound adapters (Phase 6):**
+
+| Adapter | Path | Port Dependencies | Endpoint |
+|---------|------|-------------------|----------|
+| `BotQueryControllerAdapter` | `adapter/in/web/` | `AskQuestionUseCase`, `QuestionWebMapper` | POST `/api/v1/ask` |
+| `BotFeedbackControllerAdapter` | `adapter/in/web/` | `SaveFeedbackUseCase`, `GetFeedbackUseCase`, `FeedbackWebMapper`, `IdentityProviderPort` | POST/GET `/api/v1/botfeedback` |
+| `BotIntroControllerAdapter` | `adapter/in/web/` | `GetBotIntroUseCase` | GET `/api/v1/bot/intro` |
+
 ### 7.2 Outbound Adapters
 
-All 6 outbound adapters are implemented. Each wraps an existing infrastructure service and implements its corresponding port interface. All are wired as `@Component` beans.
+All 7 outbound adapters are implemented. Each wraps an existing infrastructure service and implements its corresponding port interface. All are wired as `@Component` beans.
 
 #### Persistence Adapter (JPA)
 
@@ -234,3 +252,9 @@ All 6 outbound adapters are implemented. Each wraps an existing infrastructure s
 - Returns `Optional.empty()` for inputs shorter than 10 characters
 - Maps Lingua `Language` enum → ISO 639-1 code string (lowercase)
 - Returns `Optional.empty()` for `Language.UNKNOWN`
+
+#### Identity Adapter
+
+- `SpringSecurityIdentityAdapter` implements `IdentityProviderPort`
+- Wraps existing `SecurityUtils` (reads email from Spring Security `SecurityContextHolder`)
+- Decouples inbound adapters from the old `service.security` package

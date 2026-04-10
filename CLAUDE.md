@@ -139,7 +139,7 @@ This is a Spring Boot 3.2.5 / Java 17 RAG (Retrieval-Augmented Generation) servi
 
 **Root package**: `com.nikiforov.aichatbot`
 
-### Hexagonal Domain Layer (Phases 1–5 complete)
+### Hexagonal Domain Layer (Phases 1–6 complete)
 
 The domain core has **zero framework dependencies**. It coexists with the old flat-layered code until Phase 10.
 
@@ -160,7 +160,7 @@ The domain core has **zero framework dependencies**. It coexists with the old fl
 - `FormatValidator` — null/blank/length/letter checks
 
 **Port interfaces** (`port/in/`): `AskQuestionUseCase`, `SaveFeedbackUseCase`, `GetFeedbackUseCase`, `GetBotIntroUseCase`
-**Port interfaces** (`port/out/`): `LlmPort`, `EmbeddingPort`, `VectorSearchPort`, `VectorIndexPort`, `FeedbackPersistencePort`, `DocumentStoragePort`, `LanguageDetectionPort`
+**Port interfaces** (`port/out/`): `LlmPort`, `EmbeddingPort`, `VectorSearchPort`, `VectorIndexPort`, `FeedbackPersistencePort`, `DocumentStoragePort`, `LanguageDetectionPort`, `IdentityProviderPort`
 
 **Domain tests**: 65 tests in `src/test/java/.../domain/` — pure JUnit 5 + AssertJ, NO Spring, NO Mockito. Hand-written stubs implement port interfaces.
 
@@ -168,9 +168,9 @@ The domain core has **zero framework dependencies**. It coexists with the old fl
 - `RagOrchestrator` computes `queryType` but does not yet use it for type-specific retrieval (deferred to Phase 7 when adapters provide page lookups)
 - DEFINITION fallback retry not yet implemented (deferred to Phase 7)
 
-### Outbound Adapters (Phase 5)
+### Outbound Adapters (Phase 5–6)
 
-6 adapters wrap existing infrastructure behind port interfaces. All are `@Component` beans.
+7 adapters wrap existing infrastructure behind port interfaces. All are `@Component` beans.
 
 | Adapter | Location | Wraps | Port |
 |---------|----------|-------|------|
@@ -180,10 +180,28 @@ The domain core has **zero framework dependencies**. It coexists with the old fl
 | `AzureBlobStorageAdapter` | `adapter/out/storage/` | `AzureBlobStorageService` | `DocumentStoragePort` |
 | `LinguaLanguageAdapter` | `adapter/out/language/` | Lingua `LanguageDetector` | `LanguageDetectionPort` |
 | `OllamaEmbeddingAdapter` | `adapter/out/embedding/` | Spring AI `EmbeddingModel` | `EmbeddingPort` |
+| `SpringSecurityIdentityAdapter` | `adapter/out/security/` | `SecurityUtils` | `IdentityProviderPort` |
 
 `FeedbackPersistenceMapper` (MapStruct) maps domain `Feedback` ↔ JPA `BotFeedback` at the adapter boundary.
 
 6 port contract tests (15 abstract tests) in `src/test/java/.../port/out/`. Adapter tests are `@Disabled` (need live infra).
+
+### Inbound Adapters (Phase 6)
+
+3 new REST controllers in `adapter/in/web/` calling inbound ports. All use `@ConditionalOnProperty(name = "app.adapters.inbound.enabled", havingValue = "true")` — dormant until Phase 7 wires ports. Old controllers continue serving traffic.
+
+| Adapter | Endpoint | Port Dependencies |
+|---------|----------|-------------------|
+| `BotQueryControllerAdapter` | POST `/api/v1/ask` | `AskQuestionUseCase`, `QuestionWebMapper` |
+| `BotFeedbackControllerAdapter` | POST/GET `/api/v1/botfeedback` | `SaveFeedbackUseCase`, `GetFeedbackUseCase`, `FeedbackWebMapper`, `IdentityProviderPort` |
+| `BotIntroControllerAdapter` | GET `/api/v1/bot/intro` | `GetBotIntroUseCase` |
+
+Web DTOs in `adapter/in/web/dto/`: `AskRequest`, `AskResponse`, `FeedbackRequest`, `FeedbackResponse`, `IntroResponse`.
+Web mappers in `adapter/in/web/mapper/`: `QuestionWebMapper`, `FeedbackWebMapper` (MapStruct, `componentModel = "spring"`).
+
+`GlobalExceptionHandler` now handles domain exceptions: `FeedbackNotFoundException` → 404, `LlmUnavailableException` → 503. All error responses include `errorCode` + `message` fields.
+
+12 adapter tests (3 `@WebMvcTest` classes) using `@TestPropertySource(properties = "app.adapters.inbound.enabled=true")`.
 
 ### REST API
 
@@ -295,6 +313,7 @@ Config prefix is `rag` for RAG properties and `bot` for bot properties.
 | `rag.validation.language-detector.*` | Language detection thresholds |
 | `rag.validation.domain-checker.*` | Domain relevance thresholds |
 | `bot.intro-text` | Bot greeting text |
+| `app.adapters.inbound.enabled` | `true` = activate Phase 6 inbound adapters; `false` (default) = old controllers serve traffic |
 | `spring.liquibase.change-log` | Liquibase master changelog path |
 
 # Security Rules
