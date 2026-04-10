@@ -186,33 +186,51 @@ The web adapter translates HTTP requests into use case calls and domain results 
 
 ### 7.2 Outbound Adapters
 
+All 6 outbound adapters are implemented. Each wraps an existing infrastructure service and implements its corresponding port interface. All are wired as `@Component` beans.
+
 #### Persistence Adapter (JPA)
 
-- JPA entities (`FeedbackJpaEntity`) are **separate** from domain models (`Feedback`)
-- MapStruct mappers translate between domain and JPA
 - `FeedbackPersistenceAdapter` implements `FeedbackPersistencePort`
-- JPA annotations exist ONLY in the adapter layer
+- JPA entities (`BotFeedback`) currently in old `model/` package — will move to `adapter/out/persistence/entity/` in Phase 10
+- `FeedbackPersistenceMapper` (MapStruct) translates between domain `Feedback`/`FeedbackId`/`FeedbackType` and JPA `BotFeedback`/`BotFeedbackType`
+- Handles `Instant` ↔ `LocalDateTime` conversion for `createdAt`
+- Wraps `BotFeedbackRepository` (Spring Data JPA)
 
 #### LLM Adapter
 
-- `OpenRouterLlmAdapter` implements `LlmPort` and `LlmStreamPort`
-- `LlmProviderChain` wraps multiple `LlmPort` instances with failover logic
-- Each adapter handles its own HTTP communication, serialization, error handling
+- `OpenRouterLlmAdapter` implements `LlmPort`
+- Wraps existing `LlmClient` (delegates `ask()` calls)
+- Catches all exceptions → throws `LlmUnavailableException`
+- Token usage currently zeroed (deferred — `LlmClient.ask()` returns `String` only)
 
 #### Embedding Adapter
 
 - `OllamaEmbeddingAdapter` implements `EmbeddingPort`
-- Adapter handles Ollama HTTP API specifics
-- Switching providers = adding a new adapter + configuration change
+- Wraps Spring AI `EmbeddingModel` bean (Ollama `nomic-embed-text`)
+- `dimensions()` returns 768 (hardcoded to match `nomic-embed-text`)
 
 #### Vector Store Adapter
 
-- `InMemoryVectorStoreAdapter` implements `VectorSearchPort` + `VectorIndexPort`
-- Keeps the current `CustomSimpleVectorStore` internally
-- `PgVectorStoreAdapter` will use pgvector SQL operations
+- `InMemoryVectorStoreAdapter` implements both `VectorSearchPort` and `VectorIndexPort`
+- Wraps existing `EmbeddingIndexer` + `CustomSimpleVectorStore`
+- Maps between domain `DocumentChunk` and Spring AI `Document`:
+  - `toChunk()`: extracts `page` and `source` from metadata, uses `doc.getText()` for content
+  - `toDocument()`: passes chunk metadata as-is to Spring AI `Document` constructor
 
 #### Blob Storage Adapter
 
 - `AzureBlobStorageAdapter` implements `DocumentStoragePort`
-- Handles Azure SDK specifics, SAS token management
+- Wraps existing `AzureBlobStorageService`
+- Maps path strings to specific blob operations:
+  - `"vectorstore"` → vector store download/upload/exists
+  - `"metadata"` → metadata download/upload/exists
+  - default → PDF download/exists
 - Can be replaced with S3 adapter, local filesystem adapter, etc.
+
+#### Language Detection Adapter
+
+- `LinguaLanguageAdapter` implements `LanguageDetectionPort`
+- Wraps Lingua `LanguageDetector` bean (configured in `LinguaConfig`)
+- Returns `Optional.empty()` for inputs shorter than 10 characters
+- Maps Lingua `Language` enum → ISO 639-1 code string (lowercase)
+- Returns `Optional.empty()` for `Language.UNKNOWN`

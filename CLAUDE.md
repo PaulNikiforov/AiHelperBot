@@ -139,7 +139,7 @@ This is a Spring Boot 3.2.5 / Java 17 RAG (Retrieval-Augmented Generation) servi
 
 **Root package**: `com.nikiforov.aichatbot`
 
-### Hexagonal Domain Layer (Phases 1–4 complete)
+### Hexagonal Domain Layer (Phases 1–5 complete)
 
 The domain core has **zero framework dependencies**. It coexists with the old flat-layered code until Phase 10.
 
@@ -162,11 +162,28 @@ The domain core has **zero framework dependencies**. It coexists with the old fl
 **Port interfaces** (`port/in/`): `AskQuestionUseCase`, `SaveFeedbackUseCase`, `GetFeedbackUseCase`, `GetBotIntroUseCase`
 **Port interfaces** (`port/out/`): `LlmPort`, `EmbeddingPort`, `VectorSearchPort`, `VectorIndexPort`, `FeedbackPersistencePort`, `DocumentStoragePort`, `LanguageDetectionPort`
 
-**Domain tests**: 64 tests in `src/test/java/.../domain/` — pure JUnit 5 + AssertJ, NO Spring, NO Mockito. Hand-written stubs implement port interfaces.
+**Domain tests**: 65 tests in `src/test/java/.../domain/` — pure JUnit 5 + AssertJ, NO Spring, NO Mockito. Hand-written stubs implement port interfaces.
 
 **Known gaps in domain services**:
-- `RagOrchestrator` computes `queryType` but does not yet use it for type-specific retrieval (deferred to Phase 5/7 when adapters provide page lookups)
-- DEFINITION fallback retry not yet implemented (deferred to Phase 5/7)
+- `RagOrchestrator` computes `queryType` but does not yet use it for type-specific retrieval (deferred to Phase 7 when adapters provide page lookups)
+- DEFINITION fallback retry not yet implemented (deferred to Phase 7)
+
+### Outbound Adapters (Phase 5)
+
+6 adapters wrap existing infrastructure behind port interfaces. All are `@Component` beans.
+
+| Adapter | Location | Wraps | Port |
+|---------|----------|-------|------|
+| `OpenRouterLlmAdapter` | `adapter/out/llm/` | `LlmClient` | `LlmPort` |
+| `InMemoryVectorStoreAdapter` | `adapter/out/vectorstore/` | `EmbeddingIndexer` | `VectorSearchPort` + `VectorIndexPort` |
+| `FeedbackPersistenceAdapter` | `adapter/out/persistence/` | `BotFeedbackRepository` | `FeedbackPersistencePort` |
+| `AzureBlobStorageAdapter` | `adapter/out/storage/` | `AzureBlobStorageService` | `DocumentStoragePort` |
+| `LinguaLanguageAdapter` | `adapter/out/language/` | Lingua `LanguageDetector` | `LanguageDetectionPort` |
+| `OllamaEmbeddingAdapter` | `adapter/out/embedding/` | Spring AI `EmbeddingModel` | `EmbeddingPort` |
+
+`FeedbackPersistenceMapper` (MapStruct) maps domain `Feedback` ↔ JPA `BotFeedback` at the adapter boundary.
+
+6 port contract tests (15 abstract tests) in `src/test/java/.../port/out/`. Adapter tests are `@Disabled` (need live infra).
 
 ### REST API
 

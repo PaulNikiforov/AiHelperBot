@@ -17,4 +17,12 @@ class LlmUnavailableExceptionTest {
         LlmUnavailableException ex = new LlmUnavailableException("all providers failed");
         assertThat(ex.getMessage()).isEqualTo("all providers failed");
     }
+
+    @Test
+    void constructsWitMessageAndCause() {
+        RuntimeException cause = new RuntimeException("connection timeout");
+        LlmUnavailableException ex = new LlmUnavailableException("LLM failed", cause);
+        assertThat(ex.getMessage()).isEqualTo("LLM failed");
+        assertThat(ex.getCause()).isSameAs(cause);
+    }
 }

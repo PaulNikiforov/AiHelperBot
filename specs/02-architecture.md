@@ -184,7 +184,7 @@ com.nikiforov.aichatbot/
 2. **Phase 2 — Domain Exceptions**: Create `DomainException`, `FeedbackNotFoundException`, `LlmUnavailableException`. Done.
 3. **Phase 3 — Port Interfaces**: Define all 11 port interfaces (4 inbound, 7 outbound). Done.
 4. **Phase 4 — Domain Services**: Extract business logic into `domain/service/` and `domain/validation/`. Done.
-5. **Phase 5 — Outbound Adapters**: Wrap existing infrastructure into adapters. Upcoming.
+5. **Phase 5 — Outbound Adapters**: Wrap existing infrastructure into adapters. Done.
 6. **Phase 6 — Inbound Adapters**: Create REST controllers calling inbound ports. Upcoming.
 7. **Phase 7 — Wiring**: `BeanConfiguration` wires ports to adapters. Upcoming.
 8. **Phase 8 — Integration Tests**: Port and verify integration tests. Upcoming.

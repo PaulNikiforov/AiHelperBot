@@ -83,6 +83,19 @@ void save_truncatesAnswerTo10000() {
 
 **How**: Abstract test class parameterized by the port implementation.
 
+**Current inventory (6 contract tests, 15 abstract tests):**
+
+| Contract test | Tests | Verified by |
+|--------------|-------|-------------|
+| `LlmPortContractTest` | 3 | `OpenRouterLlmAdapterTest` (@Disabled) |
+| `VectorSearchPortContractTest` | 3 | `InMemoryVectorStoreAdapterTest` (@Disabled) |
+| `VectorIndexPortContractTest` | 2 | (no concrete test yet) |
+| `FeedbackPersistencePortContractTest` | 2 | `FeedbackPersistenceAdapterTest` (@Disabled) |
+| `DocumentStoragePortContractTest` | 2 | (no concrete test yet) |
+| `LanguageDetectionPortContractTest` | 3 | (no concrete test yet) |
+
+All adapter tests are `@Disabled` — they require live infrastructure (Ollama, OpenRouter, database, Azure Blob). Will be activated with TestContainers/WireMock in Phase 8.
+
 ```java
 // FeedbackPersistencePortContract.java
 abstract class FeedbackPersistencePortContract {

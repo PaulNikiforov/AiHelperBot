@@ -137,7 +137,7 @@ Single Spring Boot 3.2.5 / Java 17 service migrating from flat layered to hexago
 - **Ollama** (local) for embeddings (`nomic-embed-text`)
 - **OpenRouter** for LLM generation
 
-**Migration status:** Phases 1–4 complete. Domain models, exceptions, port interfaces, and domain services exist in `domain/` and `port/` alongside the original flat-layered packages. No behavior change yet — existing code is untouched. 64 domain unit tests pass.
+**Migration status:** Phases 1–5 complete. Domain models, exceptions, port interfaces, domain services, and all 6 outbound adapters exist alongside the original flat-layered packages. Adapters wrap existing infrastructure behind port interfaces. No behavior change yet — existing code is still active. 65 domain unit tests pass, Spring context loads with all adapters wired.
 
 ### 3.2 Current Package Structure (In Migration)
 
@@ -153,6 +153,14 @@ com.nikiforov.aichatbot/
 ├── port/                                # NEW — port interfaces (contracts only)
 │   ├── in/                              # Inbound ports (4 use cases)
 │   └── out/                             # Outbound ports (7 infrastructure needs)
+├── adapter/                             # NEW — outbound adapters (Phase 5)
+│   └── out/
+│       ├── llm/                         # OpenRouterLlmAdapter (wraps LlmClient)
+│       ├── vectorstore/                 # InMemoryVectorStoreAdapter (wraps EmbeddingIndexer)
+│       ├── persistence/                 # FeedbackPersistenceAdapter + MapStruct mapper
+│       ├── storage/                     # AzureBlobStorageAdapter (wraps AzureBlobStorageService)
+│       ├── language/                    # LinguaLanguageAdapter (wraps Lingua LanguageDetector)
+│       └── embedding/                   # OllamaEmbeddingAdapter (wraps Spring AI EmbeddingModel)
 ├── config/                              # Spring configuration
 │   └── properties/                      # @ConfigurationProperties beans
 ├── controller/                          # REST controllers (OLD — to be replaced in Phase 6)
@@ -209,7 +217,7 @@ Answer
 
 | Area | Limitation |
 |------|-----------|
-| **Architecture** | Migration in progress (Phases 1–4 done). Flat-layered code still active; hexagonal domain + ports coexist. Domain services exist but type-specific retrieval and DEFINITION fallback deferred to Phase 5/7. |
+| **Architecture** | Migration in progress (Phases 1–5 done). Flat-layered code still active; hexagonal domain + ports + outbound adapters coexist. 6 adapters wrap existing infrastructure behind port interfaces. Domain services exist but type-specific retrieval and DEFINITION fallback deferred to Phase 7. |
 | **Query classification** | Regex-based, hardcoded to 9 domain-specific types. Not portable. |
 | **Document retrieval** | Strategies reference hardcoded page numbers. |
 | **Vector store** | In-memory only. Single-tenant. |
@@ -217,5 +225,5 @@ Answer
 | **LLM** | Single provider (OpenRouter). No failover. No streaming. |
 | **Security** | No authentication. No rate limiting. |
 | **Observability** | Log-only. No metrics, tracing, or alerting. |
-| **Testing** | Domain unit tests in place (64 tests: 21 model + 6 exception + 37 service/validation). Port interfaces defined but no contract/adapter tests yet. Integration tests coupled to Spring context. |
+| **Testing** | Domain unit tests in place (65 tests: 21 model + 7 exception + 31 service/validation + 6 misc). 6 port contract tests (15 abstract tests). Adapter integration tests disabled (need live infra). Port interfaces defined; adapter tests need TestContainers/WireMock. |
 | **Multi-client** | No client identification. No API key management. |
