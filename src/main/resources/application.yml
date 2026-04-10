@@ -19,6 +19,11 @@ spring:
       init:
         pull-model-strategy: never
 
+app:
+  adapters:
+    inbound:
+      enabled: true
+
 bot:
   intro-text: "Hello! I'm the AI Helper Bot. I can help you with your Performance Management questions."
 

@@ -46,4 +46,4 @@ mvnw.cmd test -Dtest=ClassName
 | POST | `/api/v1/ask` | Ask a question; returns LLM answer |
 | POST | `/api/v1/botfeedback` | Save thumbs-up/down feedback |
 | GET | `/api/v1/botfeedback/{id}` | Retrieve feedback by ID |
-| GET | `/api/v1/bot/topics` | Get bot intro text and topic list |
+| GET | `/api/v1/bot/intro` | Get bot intro text |

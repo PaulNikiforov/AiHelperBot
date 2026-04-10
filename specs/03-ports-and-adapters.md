@@ -192,9 +192,9 @@ The web adapter translates HTTP requests into use case calls and domain results 
 
 **Key constraint:** Controllers MUST NOT contain business logic. They only translate, delegate, and map.
 
-**Phased activation:** All inbound adapters use `@ConditionalOnProperty(name = "app.adapters.inbound.enabled", havingValue = "true")`. They remain dormant until Phase 7 wires the port implementations as Spring beans. Old controllers continue serving traffic until Phase 10 cutover.
+**Phased activation:** All inbound adapters use `@ConditionalOnProperty(name = "app.adapters.inbound.enabled", havingValue = "true")`. Phase 7 sets this to `true` in `application.yml`, activating new adapters. Old controllers use `@ConditionalOnProperty(havingValue = "false", matchIfMissing = true)` — they are now dormant and will be deleted in Phase 10.
 
-**Implemented inbound adapters (Phase 6):**
+**Implemented inbound adapters (Phase 6–7):**
 
 | Adapter | Path | Port Dependencies | Endpoint |
 |---------|------|-------------------|----------|
@@ -205,6 +205,26 @@ The web adapter translates HTTP requests into use case calls and domain results 
 ### 7.2 Outbound Adapters
 
 All 7 outbound adapters are implemented. Each wraps an existing infrastructure service and implements its corresponding port interface. All are wired as `@Component` beans.
+
+### 7.3 Wiring Configuration (Phase 7)
+
+`BeanConfiguration` (`config/BeanConfiguration.java`) explicitly wires domain services and use case ports:
+
+| Bean | Returns | Constructor Dependencies |
+|------|---------|------------------------|
+| `formatValidator` | `FormatValidator` | `RagValidationProperties` (reads `minLength`) |
+| `inputValidationChain` | `InputValidationChain` | `FormatValidator` |
+| `queryClassifier` | `QueryClassifier` | (none) |
+| `domainDocumentRanker` | `DocumentRanker` | (none) |
+| `promptAssembler` | `PromptAssembler` | (none) |
+| `askQuestionUseCase` | `AskQuestionUseCase` | `InputValidationChain`, `QueryClassifier`, `VectorSearchPort`, `DocumentRanker`, `PromptAssembler`, `LlmPort` → `RagOrchestrator` |
+| `feedbackService` | `FeedbackService` | `FeedbackPersistencePort` |
+| `saveFeedbackUseCase` | `SaveFeedbackUseCase` | `FeedbackService` (delegates) |
+| `getFeedbackUseCase` | `GetFeedbackUseCase` | `FeedbackService` (delegates) |
+
+`BotIntroAdapter` (`adapter/in/config/BotIntroAdapter.java`) is a `@Component` implementing `GetBotIntroUseCase` by reading `BotProperties.introText`.
+
+Outbound adapters are auto-discovered via `@Component` scanning.
 
 #### Persistence Adapter (JPA)
 

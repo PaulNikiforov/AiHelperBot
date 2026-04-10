@@ -94,6 +94,8 @@ com.nikiforov.aichatbot/
 │
 ├── adapter/                             # ADAPTERS — infrastructure implementations
 │   ├── in/                              # Inbound adapters (driving)
+│   │   ├── config/                      # Adapter config
+│   │   │   └── BotIntroAdapter.java     # GetBotIntroUseCase impl (reads BotProperties)
 │   │   └── web/                         # REST API
 │   │       ├── BotQueryController.java
 │   │       ├── BotFeedbackController.java
@@ -146,13 +148,20 @@ com.nikiforov.aichatbot/
 │       └── language/                    # Language detection adapter
 │           └── LinguaLanguageAdapter.java          # Implements LanguageDetectionPort
 │
-└── config/                              # Spring Boot configuration
-    ├── BeanConfiguration.java           # Wire ports to adapters
-    ├── SecurityConfiguration.java
-    ├── WebConfiguration.java
-    └── properties/
-        ├── RagProperties.java
-        └── BotProperties.java
+│       └── security/                    # Security adapter
+│           └── SpringSecurityIdentityAdapter.java  # Implements IdentityProviderPort
+│
+├── config/                              # Spring Boot configuration
+│   ├── BeanConfiguration.java           # Wire domain services to ports (Phase 7)
+│   ├── RagConfig.java                   # RAG infrastructure beans
+│   ├── LinguaConfig.java                # Lingua language detector bean
+│   ├── SecurityConfig.java              # Spring Security config
+│   └── properties/
+│       ├── RagProperties.java
+│       ├── BotProperties.java
+│       ├── LlmProperties.java
+│       ├── GuideProperties.java
+│       └── RagValidationProperties.java
 ```
 
 ### 4.3 Dependency Rules (enforced by ArchUnit)
@@ -185,8 +194,8 @@ com.nikiforov.aichatbot/
 3. **Phase 3 — Port Interfaces**: Define all 12 port interfaces (4 inbound, 8 outbound). Done.
 4. **Phase 4 — Domain Services**: Extract business logic into `domain/service/` and `domain/validation/`. Done.
 5. **Phase 5 — Outbound Adapters**: Wrap existing infrastructure into adapters. Done.
-6. **Phase 6 — Inbound Adapters**: Create REST controllers calling inbound ports. Done. Adapters use `@ConditionalOnProperty(name = "app.adapters.inbound.enabled", havingValue = "true")` to stay dormant until Phase 7 wires port implementations.
-7. **Phase 7 — Wiring**: `BeanConfiguration` wires ports to adapters. Upcoming.
+6. **Phase 6 — Inbound Adapters**: Create REST controllers calling inbound ports. Done.
+7. **Phase 7 — Configuration & Wiring**: `BeanConfiguration` wires ports to adapters, `BotIntroAdapter` implements `GetBotIntroUseCase`, `app.adapters.inbound.enabled=true` activates new controllers. Done.
 8. **Phase 8 — Integration Tests**: Port and verify integration tests. Upcoming.
 9. **Phase 9 — Activate ArchUnit**: Enable architecture enforcement tests. Upcoming.
 10. **Phase 10 — Delete Old Code**: Remove flat-layered packages. Upcoming.

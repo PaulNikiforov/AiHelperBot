@@ -10,32 +10,63 @@
 server:
   port: 8080
 
-security:
-  api-key:
-    enabled: true
-    header-name: X-API-Key
-
-rag:
-  vector-store:
-    type: in-memory          # in-memory | pgvector | qdrant
-  embedding:
-    provider: ollama         # ollama | openai | cohere
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/ai_helper_bot_db
+    username: bot_user
+    password: ${DB_PASSWORD}
+  liquibase:
+    change-log: classpath:/db/changelog/db.changelog-master.yaml
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+  ai:
     ollama:
       base-url: http://localhost:11434
-      model: nomic-embed-text
+      embedding:
+        enabled: true
+        options:
+          model: nomic-embed-text
+      init:
+        pull-model-strategy: never
+
+app:
+  adapters:
+    inbound:
+      enabled: true           # true = new hexagonal adapters serve traffic (current); false = old controllers
+
+bot:
+  intro-text: "Hello! I'm the AI Helper Bot. I can help you with your Performance Management questions."
+
+rag:
+  storage:
+    blob:
+      url: ${AZURE_BLOB_URL:}
   llm:
-    chain:
-      - provider: openrouter
-        model: ${LLM_MODEL:anthropic/claude-sonnet-4}
-        base-url: ${LLM_BASE_URL:https://openrouter.ai/api/v1}
-        api-key: ${OPEN_ROUTER_API_KEY}
-        timeout-seconds: 30
+    base-url: ${LLM_BASE_URL:https://openrouter.ai/api/v1}
+    api-key: ${OPEN_ROUTER_API_KEY}
+    model: ${LLM_MODEL:qwen/qwen3-next-80b-a3b-instruct}
     temperature: 0.3
     max-tokens: 1024
     max-documents: 5
+    http-referer: ${LLM_HTTP_REFERER:}
+    app-title: AiHelperBot
     unsatisfactory-phrases:
       - "not explicitly defined"
       - "not specified"
+  guide:
+    guide-url: ${GUIDE_URL:}
+    chunk-size: 1500
+    overlap: 200
+    pages:
+      start: 1
+      glossary: 3
+      support: 2
+      inbox: 10
+      remind-submission: 15
+      gp-employee: 20
+      gp-manager: 25
   validation:
     quick-filter:
       min-length: 2
@@ -46,22 +77,6 @@ rag:
     domain-checker:
       max-search-results: 1
       min-score: 0.5
-    prompt-injection:
-      enabled: true
-    rate-limit:
-      enabled: true
-      default-rpm: 100
-
-app:
-  adapters:
-    inbound:
-      enabled: true           # false = Phase 6 adapters dormant, old controllers serve traffic
-
-management:
-  endpoints:
-    web:
-      exposure:
-        include: health,metrics,prometheus
 ```
 
 ### 19.2 Environment Variables
@@ -71,5 +86,7 @@ management:
 | `DB_PASSWORD` | Yes | — | PostgreSQL password |
 | `OPEN_ROUTER_API_KEY` | Yes | — | Primary LLM API key |
 | `AZURE_BLOB_URL` | No | "" | Azure Blob Storage URL |
-| `LLM_BASE_URL` | No | openrouter.ai | LLM API base URL |
-| `LLM_MODEL` | No | anthropic/claude-sonnet-4 | Primary LLM model |
+| `LLM_BASE_URL` | No | `https://openrouter.ai/api/v1` | LLM API base URL |
+| `LLM_MODEL` | No | `qwen/qwen3-next-80b-a3b-instruct` | Primary LLM model |
+| `LLM_HTTP_REFERER` | No | "" | HTTP Referer header for LLM requests |
+| `GUIDE_URL` | No | "" | URL to the PDF user guide |

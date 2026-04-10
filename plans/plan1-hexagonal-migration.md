@@ -468,32 +468,36 @@ Adapter tests use `@TestPropertySource(properties = "app.adapters.inbound.enable
 
 ---
 
-## Phase 7: Configuration & Wiring
+## Phase 7: Configuration & Wiring — COMPLETE
 
-### Step 7.1 — Create BeanConfiguration
-- Create `config/BeanConfiguration.java`
-- Wires domain services to their adapter implementations
-- Explicit Spring `@Configuration` that constructs domain services with port implementations
+**Status**: All 5 steps implemented. 86 tests pass (0 failures). BUILD SUCCESS.
 
-### Step 7.2 — Create GetBotIntroUseCase implementation
-- Create a simple domain service or adapter that implements `GetBotIntroUseCase`
-- Reads intro text from `BotProperties` configuration
-- This is the only case where a domain use case reads directly from config — wire through a simple adapter
+### Step 7.1 — Create BeanConfiguration ✅
+- `config/BeanConfiguration.java` — explicit `@Configuration` wiring 9 beans:
+  - `FormatValidator` (from `RagValidationProperties.minLength`)
+  - `InputValidationChain` (wraps `FormatValidator`)
+  - `QueryClassifier`, `DocumentRanker`, `PromptAssembler` (no-arg)
+  - `AskQuestionUseCase` → `RagOrchestrator` (6 deps)
+  - `FeedbackService` (1 dep)
+  - `SaveFeedbackUseCase` / `GetFeedbackUseCase` → delegate to `FeedbackService`
 
-### Step 7.3 — Enable inbound adapters
-- Set `app.adapters.inbound.enabled=true` in `application.yml`
-- This activates the Phase 6 `@ConditionalOnProperty` on `BotQueryControllerAdapter`, `BotFeedbackControllerAdapter`, `BotIntroControllerAdapter`
-- Remove the `@ConditionalOnProperty` annotations once old controllers are removed in Phase 10
+### Step 7.2 — Create GetBotIntroUseCase implementation ✅
+- `adapter/in/config/BotIntroAdapter.java` — `@Component` implementing `GetBotIntroUseCase`
+- Reads from `BotProperties.introText` (`@ConfigurationProperties(prefix = "bot")`)
+- Configured in `application.yml` as `bot.intro-text`
 
-### Step 7.4 — Update existing controller endpoint paths
-- The existing `BotTopicsController` served `/api/v1/bot/topics`
-- The new `BotIntroControllerAdapter` serves `/api/v1/bot/intro` per spec
-- Ensure path matches spec; decide on backward compatibility
+### Step 7.3 — Enable inbound adapters ✅
+- `application.yml`: `app.adapters.inbound.enabled: true`
+- Old controllers now have `@ConditionalOnProperty(havingValue = "false", matchIfMissing = true)` — dormant
+- New adapters activated via `@ConditionalOnProperty(havingValue = "true")`
 
-### Step 7.5 — Verify compilation
-- Run `mvnw compile`
-- Both old and new packages coexist temporarily
-- No old code is deleted yet
+### Step 7.4 — Update existing controller endpoint paths ✅
+- `/api/v1/bot/topics` (old `BotTopicsController`) — dormant, no replacement serves this path
+- `/api/v1/bot/intro` (new `BotIntroControllerAdapter`) — active, per spec
+- All other endpoints (`/ask`, `/botfeedback`) serve traffic via new adapters
+
+### Step 7.5 — Verify compilation ✅
+- `./mvnw clean test` — BUILD SUCCESS, 86 tests, 0 failures, 8 skipped
 
 ---
 

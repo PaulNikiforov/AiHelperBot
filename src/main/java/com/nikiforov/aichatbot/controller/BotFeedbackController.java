@@ -8,6 +8,7 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
@@ -23,6 +24,7 @@ import org.springframework.web.bind.annotation.RestController;
 @Validated
 @RequestMapping("/api/v1/botfeedback")
 @Tag(name = "Bot Feedback")
+@ConditionalOnProperty(name = "app.adapters.inbound.enabled", havingValue = "false", matchIfMissing = true)
 public class BotFeedbackController {
 
     private final BotFeedbackService botFeedbackService;

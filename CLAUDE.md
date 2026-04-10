@@ -139,9 +139,9 @@ This is a Spring Boot 3.2.5 / Java 17 RAG (Retrieval-Augmented Generation) servi
 
 **Root package**: `com.nikiforov.aichatbot`
 
-### Hexagonal Domain Layer (Phases 1–6 complete)
+### Hexagonal Domain Layer (Phases 1–7 complete)
 
-The domain core has **zero framework dependencies**. It coexists with the old flat-layered code until Phase 10.
+The domain core has **zero framework dependencies**. It coexists with the old flat-layered code until Phase 10. New inbound adapters are **active** (Phase 7 enabled `app.adapters.inbound.enabled=true`). Old controllers are dormant (`@ConditionalOnProperty(havingValue = "false", matchIfMissing = true)`).
 
 **Domain models** (`domain/model/`): `Question`, `Answer`, `DocumentChunk`, `FeedbackId`, `Feedback`, `FeedbackType`, `ValidationResult`, `QueryType`, `LlmResponse`
 
@@ -165,10 +165,10 @@ The domain core has **zero framework dependencies**. It coexists with the old fl
 **Domain tests**: 65 tests in `src/test/java/.../domain/` — pure JUnit 5 + AssertJ, NO Spring, NO Mockito. Hand-written stubs implement port interfaces.
 
 **Known gaps in domain services**:
-- `RagOrchestrator` computes `queryType` but does not yet use it for type-specific retrieval (deferred to Phase 7 when adapters provide page lookups)
-- DEFINITION fallback retry not yet implemented (deferred to Phase 7)
+- `RagOrchestrator` computes `queryType` but does not yet use it for type-specific retrieval (deferred — requires `VectorSearchPort.findByPageNumber()` + config-based page offsets)
+- DEFINITION fallback retry not yet implemented (deferred)
 
-### Outbound Adapters (Phase 5–6)
+### Outbound Adapters (Phase 5)
 
 7 adapters wrap existing infrastructure behind port interfaces. All are `@Component` beans.
 
@@ -188,7 +188,7 @@ The domain core has **zero framework dependencies**. It coexists with the old fl
 
 ### Inbound Adapters (Phase 6)
 
-3 new REST controllers in `adapter/in/web/` calling inbound ports. All use `@ConditionalOnProperty(name = "app.adapters.inbound.enabled", havingValue = "true")` — dormant until Phase 7 wires ports. Old controllers continue serving traffic.
+3 new REST controllers in `adapter/in/web/` calling inbound ports. All use `@ConditionalOnProperty(name = "app.adapters.inbound.enabled", havingValue = "true")`. **Phase 7 enabled this in `application.yml`** — new adapters now serve traffic. Old controllers are dormant.
 
 | Adapter | Endpoint | Port Dependencies |
 |---------|----------|-------------------|
@@ -203,27 +203,35 @@ Web mappers in `adapter/in/web/mapper/`: `QuestionWebMapper`, `FeedbackWebMapper
 
 12 adapter tests (3 `@WebMvcTest` classes) using `@TestPropertySource(properties = "app.adapters.inbound.enabled=true")`.
 
+### Wiring Configuration (Phase 7)
+
+`BeanConfiguration` (`config/BeanConfiguration.java`) explicitly wires all domain services and use case ports via `@Bean` methods. No domain service has `@Component` — all are constructed in the configuration class.
+
+`BotIntroAdapter` (`adapter/in/config/BotIntroAdapter.java`) is a `@Component` implementing `GetBotIntroUseCase` — reads `BotProperties.introText`. This is the only adapter that is not a REST controller in the `adapter/in/` package.
+
 ### REST API
 
 | Method | Path | Controller | Description |
 |---|---|---|---|
-| POST | `/api/v1/ask` | `BotQueryController` | Ask a question; returns LLM answer |
-| POST | `/api/v1/botfeedback` | `BotFeedbackController` | Save thumbs-up/down feedback |
-| GET | `/api/v1/botfeedback/{id}` | `BotFeedbackController` | Retrieve feedback by ID |
-| GET | `/api/v1/bot/topics` | `BotTopicsController` | Get bot intro text |
+| POST | `/api/v1/ask` | `BotQueryControllerAdapter` | Ask a question; returns LLM answer |
+| POST | `/api/v1/botfeedback` | `BotFeedbackControllerAdapter` | Save thumbs-up/down feedback |
+| GET | `/api/v1/botfeedback/{id}` | `BotFeedbackControllerAdapter` | Retrieve feedback by ID |
+| GET | `/api/v1/bot/intro` | `BotIntroControllerAdapter` | Get bot intro text |
 
-Security: CSRF disabled, all endpoints permit all (no authentication required). Authenticated user email is read from `SecurityContextHolder` by `SecurityUtils` when saving feedback.
+Old controllers (`BotQueryController`, `BotFeedbackController`, `BotTopicsController`) are dormant via `@ConditionalOnProperty(havingValue = "false", matchIfMissing = true)` and will be deleted in Phase 10.
+
+Security: CSRF disabled, all endpoints permit all (no authentication required). Authenticated user email is read from `SecurityContextHolder` by `SpringSecurityIdentityAdapter` → `IdentityProviderPort` when saving feedback.
 
 ### RAG Pipeline (core flow)
 
-POST `/api/v1/ask` → `BotQueryController` → `RagService.answer()`
+POST `/api/v1/ask` → `BotQueryControllerAdapter` → `AskQuestionUseCase` → `RagOrchestrator.ask()`
 
-1. `InputValidator` — chain of `InputFilter`s: `QuickInputFilter`, `LanguageDetectorFilter`, `DomainRelevanceChecker`
-2. `QueryAnalyzer` — classifies query into `QueryType` enum (`GENERAL`, `DEFINITION`, `TIME_RELATED`, `SUPPORT`, `INBOX`, `PEERS`, `REVIEW_PROCESS`, `REMIND_PEERS`, `GROWTH_PLAN`)
-3. `DocumentRetriever` — fetches candidates from `EmbeddingIndexer`, applies type-specific strategies
-4. `DocumentRanker` — re-ranks/merges candidates
-5. `PromptBuilder` — assembles final prompt string
-6. `LlmClient` — POSTs base64-encoded prompt to external LLM API, returns text answer
+1. `InputValidationChain` — chain of `InputValidatorFn`s: currently `FormatValidator` (null/blank/length/letter checks)
+2. `QueryClassifier` — classifies query into `QueryType` enum (`GENERAL`, `DEFINITION`, `TIME_RELATED`, `SUPPORT`, `INBOX`, `PEERS`, `REVIEW_PROCESS`, `REMIND_PEERS`, `GROWTH_PLAN`)
+3. `VectorSearchPort.search()` — fetches candidates from `InMemoryVectorStoreAdapter`
+4. `DocumentRanker` — re-ranks candidates by keyword scoring
+5. `PromptAssembler` — assembles final system + user prompt from context docs
+6. `LlmPort.ask()` — sends prompt to `OpenRouterLlmAdapter`, returns `LlmResponse`
 
 **DEFINITION fallback**: if the LLM answer contains "not explicitly defined" or "not specified", the query is retried with `GENERAL` strategy.
 
@@ -313,7 +321,7 @@ Config prefix is `rag` for RAG properties and `bot` for bot properties.
 | `rag.validation.language-detector.*` | Language detection thresholds |
 | `rag.validation.domain-checker.*` | Domain relevance thresholds |
 | `bot.intro-text` | Bot greeting text |
-| `app.adapters.inbound.enabled` | `true` = activate Phase 6 inbound adapters; `false` (default) = old controllers serve traffic |
+| `app.adapters.inbound.enabled` | `true` = new hexagonal adapters serve traffic (current); `false` = old controllers serve traffic |
 | `spring.liquibase.change-log` | Liquibase master changelog path |
 
 # Security Rules
@@ -357,11 +365,12 @@ api-key: sk-abc123...
 ### Exception Handling
 
 `GlobalExceptionHandler` (`@RestControllerAdvice`) handles:
-- `CodedException` (base class) / `RestException` (concrete) → JSON `{ errorCode, message }`
-- `MethodArgumentNotValidException` → validation error details
-- Generic `Exception` → HTTP 500
-
-`ErrorCodes` enum: `BOT_FEEDBACK_NOT_FOUND` (code 300000, status 404).
+- `FeedbackNotFoundException` → 404, errorCode `"300000"`
+- `LlmUnavailableException` → 503, errorCode `"LLM_ERROR"`
+- `MethodArgumentNotValidException` → 400, errorCode `"VALIDATION_FAILED"`
+- `LlmException` (old) → 503, errorCode `"LLM_ERROR"`
+- `CodedException` (old) → mapped by error code
+- Generic `Exception` → 500, errorCode `"INTERNAL_ERROR"`
 
 ### Tests
 
