@@ -206,7 +206,7 @@
 
 ---
 
-## Phase 4: Domain Services (extract business logic)
+## Phase 4: Domain Services (extract business logic) ✅ DONE
 
 *Move business logic from existing `service/` classes into domain services in `domain/service/` and `domain/validation/`. Domain services depend ONLY on ports and domain models — no Spring, no infrastructure.*
 

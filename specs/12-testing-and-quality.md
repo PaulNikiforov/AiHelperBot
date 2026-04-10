@@ -20,6 +20,30 @@
 
 **How**: JUnit 5 + AssertJ. NO Spring context. NO mocks of ports (pass test doubles implementing port interfaces).
 
+**Current inventory (64 tests):**
+
+| Test class | Tests | What |
+|-----------|-------|------|
+| `QuestionTest` | 3 | Null/blank rejection, valid text |
+| `AnswerTest` | 3 | `defaultResponse()`, `unavailable()`, stores text/tokens |
+| `DocumentChunkTest` | 2 | Stores all fields, empty metadata |
+| `FeedbackIdTest` | 2 | Stores value, equality |
+| `FeedbackTest` | 4 | Construction, truncation, null email, exact limit |
+| `FeedbackTypeTest` | 1 | Has LIKE and DISLIKE |
+| `ValidationResultTest` | 4 | `pass()`, `fail()`, fail with null/blank throws |
+| `QueryTypeTest` | 1 | Has 9 expected values |
+| `LlmResponseTest` | 1 | Stores answer text, tokens, provider ID |
+| `DomainExceptionTest` | 2 | Constructor with message, with cause |
+| `FeedbackNotFoundExceptionTest` | 2 | Extends DomainException, message contains ID |
+| `LlmUnavailableExceptionTest` | 2 | Extends DomainException, message |
+| `InputValidationChainTest` | 4 | All pass, first fail, second fail, empty list |
+| `FormatValidatorTest` | 5 | Null, blank, short, no letters, valid |
+| `QueryClassifierTest` | 12 | All 9 types, extractTerm (def, time), fallback |
+| `DocumentRankerTest` | 4 | Keywords, time relevance, merge with page, dedup |
+| `PromptAssemblerTest` | 2 | With context, empty context |
+| `FeedbackServiceTest` | 5 | Truncation, exact limit, delegation, found, not-found |
+| `RagOrchestratorTest` | 5 | Not loaded, validation fail, no docs, happy path, LLM failure |
+
 **Examples**:
 ```java
 // RagOrchestratorTest.java

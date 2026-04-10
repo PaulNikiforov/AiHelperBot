@@ -62,7 +62,8 @@ com.nikiforov.aichatbot/
 │   │   └── FeedbackService.java         # Feedback business logic
 │   │
 │   ├── validation/                      # Domain validation rules
-│   │   ├── InputValidationChain.java    # Ordered chain of validators
+│   │   ├── InputValidatorFn.java        # @FunctionalInterface for validator functions
+│   │   ├── InputValidationChain.java    # Ordered chain of validators (short-circuit on fail)
 │   │   ├── FormatValidator.java         # Blank/short/no-letters check
 │   │   └── DomainTerms.java             # Glossary terms set
 │   │
@@ -179,11 +180,17 @@ com.nikiforov.aichatbot/
 
 ### 4.5 Migration Path
 
-1. **Phase 1 — Define Ports**: Create all port interfaces (from this spec). Write port contract tests.
-2. **Phase 2 — Extract Domain**: Move business logic out of Spring services into domain services. Create domain models separate from JPA entities.
-3. **Phase 3 — Implement Adapters**: Wrap existing infrastructure code into adapters that implement outbound ports. Create inbound web adapters.
-4. **Phase 4 — Wire Up**: Configure `BeanConfiguration` to wire ports to adapters. Verify all tests pass.
-5. **Phase 5 — Clean Up**: Remove old layered packages. Run ArchUnit to verify dependency rules. Delete dead code.
+1. **Phase 1 — Domain Models**: Create value objects, entities, enums in `domain/model/`. Done.
+2. **Phase 2 — Domain Exceptions**: Create `DomainException`, `FeedbackNotFoundException`, `LlmUnavailableException`. Done.
+3. **Phase 3 — Port Interfaces**: Define all 11 port interfaces (4 inbound, 7 outbound). Done.
+4. **Phase 4 — Domain Services**: Extract business logic into `domain/service/` and `domain/validation/`. Done.
+5. **Phase 5 — Outbound Adapters**: Wrap existing infrastructure into adapters. Upcoming.
+6. **Phase 6 — Inbound Adapters**: Create REST controllers calling inbound ports. Upcoming.
+7. **Phase 7 — Wiring**: `BeanConfiguration` wires ports to adapters. Upcoming.
+8. **Phase 8 — Integration Tests**: Port and verify integration tests. Upcoming.
+9. **Phase 9 — Activate ArchUnit**: Enable architecture enforcement tests. Upcoming.
+10. **Phase 10 — Delete Old Code**: Remove flat-layered packages. Upcoming.
+11. **Phase 11 — Final Validation**: Full test suite, application startup. Upcoming.
 
 ---
 
@@ -299,28 +306,80 @@ public record LlmResponse(String answerText, int promptTokens, int completionTok
 
 #### RagOrchestrator
 
-Central domain service that orchestrates the full RAG pipeline. Depends only on outbound ports.
+Central domain service that orchestrates the full RAG pipeline. Implements `AskQuestionUseCase`.
 
-**Responsibilities:**
-- Validate input via `InputValidationChain`
-- Classify query type via `QueryClassifier`
-- Search documents via `VectorSearchPort`
-- Rank results via `DocumentRanker`
-- Build prompt via `PromptAssembler`
-- Send to LLM via `LlmPort`
-- Handle DEFINITION fallback
+**Constructor dependencies:** `InputValidationChain`, `QueryClassifier`, `VectorSearchPort`, `DocumentRanker`, `PromptAssembler`, `LlmPort`
+
+**Current flow:**
+1. Check if vector store is loaded → return `Answer.unavailable()` if not
+2. Validate input via `InputValidationChain` → return rejection message if failed
+3. Classify query type via `QueryClassifier` (computed but not yet used for type-specific retrieval)
+4. Search documents via `VectorSearchPort.search()`
+5. Rank results via `DocumentRanker.rankByKeywords()`
+6. Build prompt via `PromptAssembler.build()`
+7. Send to LLM via `LlmPort.ask()`
+8. Return answer with token counts
+
+**Deferred to Phase 5/7:**
+- Type-specific retrieval strategies (requires `VectorSearchPort.findByPageNumber()` + config-based page offsets)
+- DEFINITION fallback retry (retry with GENERAL strategy if answer contains "not explicitly defined")
 
 **Does NOT:**
 - Know about HTTP, REST, JSON
 - Know about JPA, SQL, Blob Storage
 - Know about OpenRouter, Ollama, or any specific provider
 
+#### QueryClassifier
+
+Pure regex-based query classification. No dependencies.
+
+- Maps input text to one of 9 `QueryType` values
+- Priority order: `SUPPORT > REVIEW_PROCESS > PEERS > REMIND_PEERS > INBOX > GROWTH_PLAN > TIME_RELATED > DEFINITION > GENERAL`
+- `extractTerm()` extracts the focus term from DEFINITION/TIME_RELATED queries
+- `classify()` validates that definition terms have ≤ 3 words (otherwise falls back to GENERAL)
+
+#### DocumentRanker
+
+Scores and ranks document chunks. No dependencies.
+
+- `rankByKeywords()` — word-count overlap scoring between document content and query
+- `rankByTimeRelevance()` — keyword score + time-pattern bonus (dates, deadlines, schedules)
+- `mergeWithPage()` — prepends page-specific docs, deduplicates, respects max limit
+
+#### PromptAssembler
+
+Builds system + user prompt from context documents. No dependencies.
+
+- Returns a `ChatMessages` record with `systemMessage` and `userMessage`
+- System prompt contains behavioral rules for the LLM
+- User message includes page-labeled context excerpts
+
 #### FeedbackService
 
-**Responsibilities:**
-- Validate feedback data
-- Truncate answer to 10,000 chars
-- Delegate persistence to `FeedbackPersistencePort`
+Implements `SaveFeedbackUseCase` and `GetFeedbackUseCase`.
+
+**Constructor dependencies:** `FeedbackPersistencePort`
+
+- `save()` delegates to persistence (ID is assigned by the adapter, domain passes `null`)
+- `getById()` throws `FeedbackNotFoundException` if not found
+- Answer truncation to 10,000 chars happens in the `Feedback` entity constructor
+
+### 5.3 Domain Validation
+
+#### InputValidatorFn
+
+`@FunctionalInterface` that takes a `String` input and returns `ValidationResult`.
+
+#### InputValidationChain
+
+Takes a `List<InputValidatorFn>` and validates sequentially, short-circuiting on the first failure.
+
+#### FormatValidator
+
+Implements `InputValidatorFn`. Checks:
+- Null or blank input → fail
+- Input shorter than `minLength` → fail
+- Input with no Unicode letters → fail
 
 ### 5.3 Domain Exceptions
 

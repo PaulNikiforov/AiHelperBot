@@ -139,6 +139,35 @@ This is a Spring Boot 3.2.5 / Java 17 RAG (Retrieval-Augmented Generation) servi
 
 **Root package**: `com.nikiforov.aichatbot`
 
+### Hexagonal Domain Layer (Phases 1–4 complete)
+
+The domain core has **zero framework dependencies**. It coexists with the old flat-layered code until Phase 10.
+
+**Domain models** (`domain/model/`): `Question`, `Answer`, `DocumentChunk`, `FeedbackId`, `Feedback`, `FeedbackType`, `ValidationResult`, `QueryType`, `LlmResponse`
+
+**Domain exceptions** (`domain/exception/`): `DomainException`, `FeedbackNotFoundException`, `LlmUnavailableException`
+
+**Domain services** (`domain/service/`):
+- `RagOrchestrator` — implements `AskQuestionUseCase`, orchestrates validate→classify→retrieve→rank→prompt→LLM
+- `QueryClassifier` — regex-based query type classification (9 types)
+- `DocumentRanker` — keyword scoring, time-relevance scoring, page merging
+- `PromptAssembler` — builds system + user prompt from context docs
+- `FeedbackService` — implements `SaveFeedbackUseCase` + `GetFeedbackUseCase`
+
+**Domain validation** (`domain/validation/`):
+- `InputValidatorFn` — `@FunctionalInterface` for validator functions
+- `InputValidationChain` — sequential validator execution, short-circuit on failure
+- `FormatValidator` — null/blank/length/letter checks
+
+**Port interfaces** (`port/in/`): `AskQuestionUseCase`, `SaveFeedbackUseCase`, `GetFeedbackUseCase`, `GetBotIntroUseCase`
+**Port interfaces** (`port/out/`): `LlmPort`, `EmbeddingPort`, `VectorSearchPort`, `VectorIndexPort`, `FeedbackPersistencePort`, `DocumentStoragePort`, `LanguageDetectionPort`
+
+**Domain tests**: 64 tests in `src/test/java/.../domain/` — pure JUnit 5 + AssertJ, NO Spring, NO Mockito. Hand-written stubs implement port interfaces.
+
+**Known gaps in domain services**:
+- `RagOrchestrator` computes `queryType` but does not yet use it for type-specific retrieval (deferred to Phase 5/7 when adapters provide page lookups)
+- DEFINITION fallback retry not yet implemented (deferred to Phase 5/7)
+
 ### REST API
 
 | Method | Path | Controller | Description |

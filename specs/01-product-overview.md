@@ -137,31 +137,35 @@ Single Spring Boot 3.2.5 / Java 17 service migrating from flat layered to hexago
 - **Ollama** (local) for embeddings (`nomic-embed-text`)
 - **OpenRouter** for LLM generation
 
-**Migration status:** Phases 1–3 complete. Domain models, exceptions, and port interfaces exist in `domain/` and `port/` alongside the original flat-layered packages. No behavior change yet — existing code is untouched.
+**Migration status:** Phases 1–4 complete. Domain models, exceptions, port interfaces, and domain services exist in `domain/` and `port/` alongside the original flat-layered packages. No behavior change yet — existing code is untouched. 64 domain unit tests pass.
 
 ### 3.2 Current Package Structure (In Migration)
 
 ```
 com.nikiforov.aichatbot/
 ├── domain/                              # NEW — hexagonal domain core
-│   ├── model/                           # Domain models (value objects, entities, enums)
-│   └── exception/                       # Domain exceptions (no HTTP status codes)
+│   ├── model/                           # Domain models (9 files: value objects, entities, enums)
+│   ├── exception/                       # Domain exceptions (3 files)
+│   ├── service/                         # Domain services (5 files: QueryClassifier, DocumentRanker,
+│   │                                    #   PromptAssembler, FeedbackService, RagOrchestrator)
+│   └── validation/                      # Domain validation (3 files: InputValidatorFn, InputValidationChain,
+│                                        #   FormatValidator)
 ├── port/                                # NEW — port interfaces (contracts only)
-│   ├── in/                              # Inbound ports (use cases)
-│   └── out/                             # Outbound ports (infrastructure needs)
+│   ├── in/                              # Inbound ports (4 use cases)
+│   └── out/                             # Outbound ports (7 infrastructure needs)
 ├── config/                              # Spring configuration
 │   └── properties/                      # @ConfigurationProperties beans
-├── controller/                          # REST controllers
+├── controller/                          # REST controllers (OLD — to be replaced in Phase 6)
 ├── dto/
-│   ├── request/                         # Request DTOs
-│   └── response/                        # Response DTOs
-├── exceptionhandler/                    # @RestControllerAdvice
-│   └── exception/                       # Custom exceptions (to be removed in Phase 11)
-├── model/                               # JPA entities + enums (to be moved to adapter/)
-├── repository/                          # Spring Data repositories (to be moved to adapter/)
+│   ├── request/                         # Request DTOs (OLD)
+│   └── response/                        # Response DTOs (OLD)
+├── exceptionhandler/                    # @RestControllerAdvice (OLD — to be replaced in Phase 6)
+│   └── exception/                       # Custom exceptions (OLD — to be removed in Phase 10)
+├── model/                               # JPA entities + enums (OLD — to be moved to adapter/)
+├── repository/                          # Spring Data repositories (OLD — to be moved to adapter/)
 └── service/
-    └── rag/                             # RAG pipeline classes (to be extracted into domain/)
-        └── validation/                  # Input validation filters
+    └── rag/                             # RAG pipeline classes (OLD — to be wrapped in adapters)
+        └── validation/                  # Input validation filters (OLD)
 ```
 
 ### 3.3 RAG Pipeline Flow
@@ -205,7 +209,7 @@ Answer
 
 | Area | Limitation |
 |------|-----------|
-| **Architecture** | Migration in progress (Phases 1–3 done). Flat-layered code still active; hexagonal domain + ports coexist. |
+| **Architecture** | Migration in progress (Phases 1–4 done). Flat-layered code still active; hexagonal domain + ports coexist. Domain services exist but type-specific retrieval and DEFINITION fallback deferred to Phase 5/7. |
 | **Query classification** | Regex-based, hardcoded to 9 domain-specific types. Not portable. |
 | **Document retrieval** | Strategies reference hardcoded page numbers. |
 | **Vector store** | In-memory only. Single-tenant. |
@@ -213,5 +217,5 @@ Answer
 | **LLM** | Single provider (OpenRouter). No failover. No streaming. |
 | **Security** | No authentication. No rate limiting. |
 | **Observability** | Log-only. No metrics, tracing, or alerting. |
-| **Testing** | Domain unit tests in place (27 tests: 21 model + 6 exception). Port interfaces defined but no contract/adapter tests yet. Integration tests coupled to Spring context. |
+| **Testing** | Domain unit tests in place (64 tests: 21 model + 6 exception + 37 service/validation). Port interfaces defined but no contract/adapter tests yet. Integration tests coupled to Spring context. |
 | **Multi-client** | No client identification. No API key management. |
