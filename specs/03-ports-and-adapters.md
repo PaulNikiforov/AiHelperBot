@@ -202,6 +202,14 @@ The web adapter translates HTTP requests into use case calls and domain results 
 | `BotFeedbackControllerAdapter` | `adapter/in/web/` | `SaveFeedbackUseCase`, `GetFeedbackUseCase`, `FeedbackWebMapper`, `IdentityProviderPort` | POST/GET `/api/v1/botfeedback` |
 | `BotIntroControllerAdapter` | `adapter/in/web/` | `GetBotIntroUseCase` | GET `/api/v1/bot/intro` |
 
+**Integration tests (Phase 8):**
+
+| Test class | Type | Coverage |
+|-----------|------|----------|
+| `AskQuestionIT` | E2E (`@SpringBootTest` + TestRestTemplate) | Valid/invalid input, validation edge cases |
+| `BotFeedbackControllerAdapterIT` | E2E (`@SpringBootTest` + TestRestTemplate) | POST/GET endpoints, 404, validation |
+| `FeedbackServiceIT` | Domain integration (`@SpringBootTest`) | Truncation, persistence round-trip, not-found |
+
 ### 7.2 Outbound Adapters
 
 All 7 outbound adapters are implemented. Each wraps an existing infrastructure service and implements its corresponding port interface. All are wired as `@Component` beans.

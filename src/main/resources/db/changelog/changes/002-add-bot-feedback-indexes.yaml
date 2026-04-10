@@ -1,0 +1,25 @@
+databaseChangeLog:
+  - changeSet:
+      id: 002-add-bot-feedback-indexes
+      author: migrations
+      changes:
+        - createIndex:
+            tableName: bot_feedback
+            indexName: idx_bot_feedback_employee_email
+            columns:
+              - column:
+                  name: employee_email
+
+        - createIndex:
+            tableName: bot_feedback
+            indexName: idx_bot_feedback_type
+            columns:
+              - column:
+                  name: bot_feedback_type
+
+        - createIndex:
+            tableName: bot_feedback
+            indexName: idx_bot_feedback_created_at
+            columns:
+              - column:
+                  name: created_at

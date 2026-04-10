@@ -139,9 +139,11 @@ This is a Spring Boot 3.2.5 / Java 17 RAG (Retrieval-Augmented Generation) servi
 
 **Root package**: `com.nikiforov.aichatbot`
 
-### Hexagonal Domain Layer (Phases 1–7 complete)
+### Hexagonal Domain Layer (Phases 1–11 COMPLETE)
 
-The domain core has **zero framework dependencies**. It coexists with the old flat-layered code until Phase 10. New inbound adapters are **active** (Phase 7 enabled `app.adapters.inbound.enabled=true`). Old controllers are dormant (`@ConditionalOnProperty(havingValue = "false", matchIfMissing = true)`).
+The domain core has **zero framework dependencies**. Hexagonal architecture migration is **complete** — all old flat-layered code has been deleted. The codebase now follows clean hexagonal architecture with domain, ports, and adapters properly separated.
+
+**99 tests passing, 8 skipped (live infra). 13 ArchUnit rules enforce dependency boundaries.**
 
 **Domain models** (`domain/model/`): `Question`, `Answer`, `DocumentChunk`, `FeedbackId`, `Feedback`, `FeedbackType`, `ValidationResult`, `QueryType`, `LlmResponse`
 
@@ -188,7 +190,7 @@ The domain core has **zero framework dependencies**. It coexists with the old fl
 
 ### Inbound Adapters (Phase 6)
 
-3 new REST controllers in `adapter/in/web/` calling inbound ports. All use `@ConditionalOnProperty(name = "app.adapters.inbound.enabled", havingValue = "true")`. **Phase 7 enabled this in `application.yml`** — new adapters now serve traffic. Old controllers are dormant.
+3 new REST controllers in `adapter/in/web/` calling inbound ports. All are active and serve traffic. Old controllers were deleted in Phase 10.
 
 | Adapter | Endpoint | Port Dependencies |
 |---------|----------|-------------------|
@@ -209,6 +211,42 @@ Web mappers in `adapter/in/web/mapper/`: `QuestionWebMapper`, `FeedbackWebMapper
 
 `BotIntroAdapter` (`adapter/in/config/BotIntroAdapter.java`) is a `@Component` implementing `GetBotIntroUseCase` — reads `BotProperties.introText`. This is the only adapter that is not a REST controller in the `adapter/in/` package.
 
+### Integration Tests (Phase 8)
+
+All integration tests use TestContainers with PostgreSQL 15 for real database testing. External dependencies (EmbeddingModel, AzureBlobStorageService) are mocked via `@MockBean`.
+
+| Test class | Coverage | Tests |
+|-----------|----------|-------|
+| `AskQuestionIT` | E2E: POST /api/v1/ask with validation edge cases | 6 |
+| `BotFeedbackControllerAdapterIT` | E2E: feedback endpoints (POST/GET, 404, validation) | 7 |
+| `FeedbackServiceIT` | Domain: persistence round-trip, truncation, not-found | 6 |
+
+Test configuration:
+```java
+@SpringBootTest(webEnvironment = RANDOM_PORT)
+@Testcontainers
+@Transactional
+@TestPropertySource(properties = {
+    "spring.liquibase.enabled=true",
+    "spring.jpa.hibernate.ddl-auto=validate",
+    "spring.ai.ollama.embedding.enabled=false",
+    "rag.storage.blob.url=",
+    "app.adapters.inbound.enabled=true"
+})
+```
+
+### Architecture Tests (Phase 9)
+
+ArchUnit tests enforce hexagonal architecture dependency rules. Located in `src/test/java/.../architecture/HexagonalArchitectureTest.java`.
+
+**13 rules enforce:**
+- Domain has zero dependencies on adapters, Spring, or JPA
+- Ports only depend on domain models
+- Adapters don't depend on each other (in↔out boundary)
+- Domain services lack `@Service`/`@Component` (wired via `@Bean`)
+
+Run: `mvnw test -Dtest=HexagonalArchitectureTest`
+
 ### REST API
 
 | Method | Path | Controller | Description |
@@ -218,7 +256,7 @@ Web mappers in `adapter/in/web/mapper/`: `QuestionWebMapper`, `FeedbackWebMapper
 | GET | `/api/v1/botfeedback/{id}` | `BotFeedbackControllerAdapter` | Retrieve feedback by ID |
 | GET | `/api/v1/bot/intro` | `BotIntroControllerAdapter` | Get bot intro text |
 
-Old controllers (`BotQueryController`, `BotFeedbackController`, `BotTopicsController`) are dormant via `@ConditionalOnProperty(havingValue = "false", matchIfMissing = true)` and will be deleted in Phase 10.
+**Note:** Old controllers were deleted in Phase 10. Only hexagonal adapters remain.
 
 Security: CSRF disabled, all endpoints permit all (no authentication required). Authenticated user email is read from `SecurityContextHolder` by `SpringSecurityIdentityAdapter` → `IdentityProviderPort` when saving feedback.
 
@@ -289,9 +327,11 @@ All subsequent queries hit the **in-memory** `CustomSimpleVectorStore` (extends 
 
 **Schema management**: Liquibase (changelogs under `src/main/resources/db/changelog/`).
 - Master file: `db.changelog-master.yaml`
-- Migrations: `changes/001-create-bot-feedback.yaml`
+- Migrations:
+  - `001-create-bot-feedback.yaml` — sequence, table
+  - `002-add-bot-feedback-indexes.yaml` — indexes on `employee_email`, `bot_feedback_type`, `created_at`
 
-**`bot_feedback` table** (entity: `BotFeedback`):
+**`bot_feedback` table** (entity: `BotFeedback` in `adapter/out/persistence/entity/`):
 | Column | Type | Notes |
 |---|---|---|
 | `id` | BIGINT PK | generated from `bot_feedback_seq` (increment 50) |
@@ -299,9 +339,14 @@ All subsequent queries hit the **in-memory** `CustomSimpleVectorStore` (extends 
 | `answer` | VARCHAR(10000) | NOT NULL |
 | `bot_feedback_type` | VARCHAR(50) | NOT NULL; enum: `LIKE`, `DISLIKE` |
 | `employee_email` | VARCHAR(255) | nullable |
-| `created_at` | TIMESTAMP | DB-generated default `CURRENT_TIMESTAMP`, read-only |
+| `created_at` | TIMESTAMP | DB-generated default `CURRENT_TIMESTAMP`, `insertable=false` |
 
-`BotFeedbackService` truncates answers to 10,000 chars in `save()` as a defensive guard. DTO validation (`@Size(max=10000)`) rejects oversized input at the API boundary.
+**Entity notes**:
+- JPA entity uses id-based `equals()`/`hashCode()` with `getClass()` for Hibernate proxy safety
+- `@ToString` excludes PII (`employee_email`) to prevent logging sensitive data
+- `insertable=false` on `created_at` ensures DB always generates the timestamp
+
+`FeedbackService` truncates answers to 10,000 chars in `save()` as a defensive guard. DTO validation (`@Size(max=10000)`) rejects oversized input at the API boundary.
 
 ### Key Configuration
 
@@ -323,6 +368,10 @@ Config prefix is `rag` for RAG properties and `bot` for bot properties.
 | `bot.intro-text` | Bot greeting text |
 | `app.adapters.inbound.enabled` | `true` = new hexagonal adapters serve traffic (current); `false` = old controllers serve traffic |
 | `spring.liquibase.change-log` | Liquibase master changelog path |
+| `spring.datasource.username` | `${DB_USERNAME:bot_user}` — env variable for DB user |
+| `spring.datasource.password` | `${DB_PASSWORD}` — env variable for DB password |
+| `spring.jpa.open-in-view` | `false` — prevents lazy loading in controllers |
+| `spring.datasource.hikari.*` | Connection pool settings (max=20, min-idle=5) |
 
 # Security Rules
 

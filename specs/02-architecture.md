@@ -196,10 +196,15 @@ com.nikiforov.aichatbot/
 5. **Phase 5 — Outbound Adapters**: Wrap existing infrastructure into adapters. Done.
 6. **Phase 6 — Inbound Adapters**: Create REST controllers calling inbound ports. Done.
 7. **Phase 7 — Configuration & Wiring**: `BeanConfiguration` wires ports to adapters, `BotIntroAdapter` implements `GetBotIntroUseCase`, `app.adapters.inbound.enabled=true` activates new controllers. Done.
-8. **Phase 8 — Integration Tests**: Port and verify integration tests. Upcoming.
-9. **Phase 9 — Activate ArchUnit**: Enable architecture enforcement tests. Upcoming.
-10. **Phase 10 — Delete Old Code**: Remove flat-layered packages. Upcoming.
-11. **Phase 11 — Final Validation**: Full test suite, application startup. Upcoming.
+8. **Phase 8 — Integration Tests**: Create integration tests with TestContainers PostgreSQL (`AskQuestionIT`, `BotFeedbackControllerAdapterIT`, `FeedbackServiceIT`). Done.
+9. **Phase 9 — Activate ArchUnit**: Enable architecture enforcement tests. Done. 13 ArchUnit rules enforce dependency boundaries.
+10. **Phase 10 — Delete Old Code**: Remove flat-layered packages. Done. All old controllers, services, DTOs, models, and exceptions deleted. Infrastructure classes moved to adapter packages.
+11. **Phase 11 — Final Validation**: Full test suite, application startup, code review fixes. Done. 99 tests pass. Non-security issues from code review fixed:
+    - JPA entity: id-based equals/hashCode, insertable=false on created_at
+    - Database indexes on employee_email, bot_feedback_type, created_at
+    - HikariCP configured, open-in-view disabled
+    - Safe pattern matching in vector store adapter
+    - Specific exception handling in LLM adapter
 
 ---
 

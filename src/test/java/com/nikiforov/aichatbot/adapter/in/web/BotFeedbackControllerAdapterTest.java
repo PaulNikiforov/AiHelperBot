@@ -121,6 +121,6 @@ class BotFeedbackControllerAdapterTest {
 
         mockMvc.perform(get("/api/v1/botfeedback/99"))
                 .andExpect(status().isNotFound())
-                .andExpect(jsonPath("$.errorCode").value("300000"));
+                .andExpect(jsonPath("$.errorCode").value("BOT_FEEDBACK_NOT_FOUND"));
     }
 }

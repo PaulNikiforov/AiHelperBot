@@ -1,14 +1,21 @@
 spring:
   datasource:
     url: jdbc:postgresql://localhost:5432/ai_helper_bot_db
-    username: bot_user
+    username: ${DB_USERNAME:bot_user}
     password: ${DB_PASSWORD}
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle: 5
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
   liquibase:
     change-log: classpath:/db/changelog/db.changelog-master.yaml
   jpa:
     hibernate:
       ddl-auto: validate
     show-sql: false
+    open-in-view: false
   ai:
     ollama:
       base-url: http://localhost:11434

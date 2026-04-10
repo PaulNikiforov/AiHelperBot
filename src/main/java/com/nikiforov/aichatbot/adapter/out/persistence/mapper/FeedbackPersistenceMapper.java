@@ -3,8 +3,8 @@ package com.nikiforov.aichatbot.adapter.out.persistence.mapper;
 import com.nikiforov.aichatbot.domain.model.Feedback;
 import com.nikiforov.aichatbot.domain.model.FeedbackId;
 import com.nikiforov.aichatbot.domain.model.FeedbackType;
-import com.nikiforov.aichatbot.model.BotFeedback;
-import com.nikiforov.aichatbot.model.BotFeedbackType;
+import com.nikiforov.aichatbot.adapter.out.persistence.entity.BotFeedback;
+import com.nikiforov.aichatbot.adapter.out.persistence.entity.BotFeedbackType;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 

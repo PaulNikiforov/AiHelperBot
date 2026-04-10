@@ -20,7 +20,7 @@
 
 **How**: JUnit 5 + AssertJ. NO Spring context. NO mocks of ports (pass test doubles implementing port interfaces).
 
-**Current inventory (64 tests):**
+**Current inventory (65 tests):**
 
 | Test class | Tests | What |
 |-----------|-------|------|
@@ -94,7 +94,7 @@ void save_truncatesAnswerTo10000() {
 | `DocumentStoragePortContractTest` | 2 | (no concrete test yet) |
 | `LanguageDetectionPortContractTest` | 3 | (no concrete test yet) |
 
-All adapter tests are `@Disabled` — they require live infrastructure (Ollama, OpenRouter, database, Azure Blob). Will be activated with TestContainers/WireMock in Phase 8.
+All adapter contract tests are `@Disabled` — they require live infrastructure (Ollama, OpenRouter, database, Azure Blob). Database contract is now covered by `FeedbackServiceIT` integration test. Other contracts will be activated with TestContainers/WireMock in Phase 11 (final validation).
 
 ```java
 // FeedbackPersistencePortContract.java
@@ -147,30 +147,63 @@ class FeedbackPersistenceAdapterTest extends FeedbackPersistencePortContract {
 - **HTTP services**: WireMock (for OpenRouter, Ollama)
 - **Blob storage**: TestContainers Azurite or mock
 
-### 20.5 Architecture Tests (ArchUnit)
+**Current inventory (22 tests, Phase 8-10):**
+
+| Test class | Tests | What |
+|-----------|-------|------|
+| `integration/AskQuestionIT` | 6 | Valid question, blank/null, short, no letters, too long validation |
+| `integration/BotFeedbackControllerAdapterIT` | 7 | Valid save, existing GET, 404 GET, blank question, null type, answer too long |
+| `integration/FeedbackServiceIT` | 6 | Truncation at limit, long answer truncation, short answer, getById found, getById not found, null email |
+| `BotIntroControllerAdapterTest` | 2 | GET returns intro text, null returns empty |
+| `BotQueryControllerAdapterTest` | 4 | Valid question, validation failures, LLM unavailable |
+
+All integration tests use:
+```java
+@SpringBootTest(webEnvironment = RANDOM_PORT)
+@Testcontainers
+@Transactional
+@TestPropertySource(properties = {
+    "spring.liquibase.enabled=true",
+    "spring.jpa.hibernate.ddl-auto=validate",
+    "spring.ai.ollama.embedding.enabled=false",
+    "rag.storage.blob.url=",
+    "app.adapters.inbound.enabled=true"
+})
+```
+
+**PostgreSQL TestContainers**:
+- PostgreSQL 15 with `@ServiceConnection` for auto-configuration
+- `@Transactional` for test isolation
+- `@MockBean` for external dependencies (EmbeddingModel, AzureBlobStorageService)
+
+**Old integration tests** (to be deleted in Phase 10):
+- `BotFeedbackControllerIT` — Tests old controller (dormant)
+- `BotFeedbackServiceIT` — Tests old service (dormant)
+
+### 20.5 Architecture Tests (ArchUnit) — Phase 9 COMPLETE
+
+**What**: Enforce hexagonal architecture dependency rules at compile/test time.
+
+**Current inventory (12 rules, Phase 9):**
+
+| Rule | Enforces |
+|------|----------|
+| `domain_mustNotDependOn_adapters` | Domain → No adapter imports |
+| `domain_mustNotDependOn_spring` | Domain → No Spring framework |
+| `domain_mustNotDependOn_persistence` | Domain → No JPA/Hibernate |
+| `portIn_mustNotDependOn_portOut` | Inbound ports → No outbound ports |
+| `portIn_shouldOnlyDependOn_domainModel` | Inbound ports → Only domain model |
+| `portOut_shouldOnlyDependOn_domainModel` | Outbound ports → Only domain model |
+| `adapterIn_mustNotDependOn_adapterOut` | Inbound adapters → No outbound adapter implementations |
+| `adapterIn_shouldOnlyDependOn_portInAndDomain` | Inbound adapters → Only allowed dependencies |
+| `adapterOut_shouldOnlyDependOn_portOutAndDomain` | Outbound adapters → Only allowed dependencies |
+| `domainServices_mustNotHave_springAnnotations` | Domain services → No @Service/@Component |
+| `domainModels_mustResideIn_domainModel` | Domain models → Correct package |
+| `noCyclicDependencies_betweenPackages` | Package slices → No cycles |
+
+**Implementation**: `src/test/java/.../architecture/HexagonalArchitectureTest.java`
 
 ```java
-@AnalyzeClasses(packages = "com.nikiforov.aichatbot")
-class HexagonalArchitectureTest {
-
-    @ArchTest
-    static final ArchRule domain_does_not_depend_on_adapters =
-        noClasses().that().resideInAPackage("..domain..")
-            .should().dependOnClassesThat().resideInAPackage("..adapter..");
-
-    @ArchTest
-    static final ArchRule domain_does_not_depend_on_spring =
-        noClasses().that().resideInAPackage("..domain..")
-            .should().dependOnClassesThat().resideInAPackage("org.springframework..");
-
-    @ArchTest
-    static final ArchRule adapters_in_do_not_depend_on_adapters_out =
-        noClasses().that().resideInAPackage("..adapter.in..")
-            .should().dependOnClassesThat().resideInAPackage("..adapter.out..");
-
-    @ArchTest
-    static final ArchRule ports_in_do_not_depend_on_ports_out =
-        noClasses().that().resideInAPackage("..port.in..")
             .should().dependOnClassesThat().resideInAPackage("..port.out..");
 }
 ```

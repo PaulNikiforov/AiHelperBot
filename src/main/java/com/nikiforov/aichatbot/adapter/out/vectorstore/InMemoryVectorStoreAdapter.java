@@ -3,7 +3,7 @@ package com.nikiforov.aichatbot.adapter.out.vectorstore;
 import com.nikiforov.aichatbot.domain.model.DocumentChunk;
 import com.nikiforov.aichatbot.port.out.VectorIndexPort;
 import com.nikiforov.aichatbot.port.out.VectorSearchPort;
-import com.nikiforov.aichatbot.service.rag.EmbeddingIndexer;
+import com.nikiforov.aichatbot.adapter.out.vectorstore.EmbeddingIndexer;
 import lombok.RequiredArgsConstructor;
 import org.springframework.ai.document.Document;
 import org.springframework.stereotype.Component;
@@ -47,9 +47,12 @@ public class InMemoryVectorStoreAdapter implements VectorSearchPort, VectorIndex
 
     private DocumentChunk toChunk(Document doc) {
         Map<String, Object> metadata = doc.getMetadata() != null ? doc.getMetadata() : Map.of();
-        int pageNumber = metadata.containsKey("page")
-                ? ((Number) metadata.get("page")).intValue()
-                : 0;
+        int pageNumber = 0;
+        // Safe extraction with pattern matching - prevents ClassCastException
+        Object pageObj = metadata.get("page");
+        if (pageObj instanceof Number n) {
+            pageNumber = n.intValue();
+        }
         String source = (String) metadata.getOrDefault("source", "unknown");
         return new DocumentChunk(doc.getId(), doc.getText(), pageNumber, source, metadata);
     }

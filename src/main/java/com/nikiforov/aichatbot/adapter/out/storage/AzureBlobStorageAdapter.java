@@ -1,7 +1,7 @@
 package com.nikiforov.aichatbot.adapter.out.storage;
 
 import com.nikiforov.aichatbot.port.out.DocumentStoragePort;
-import com.nikiforov.aichatbot.service.rag.AzureBlobStorageService;
+import com.nikiforov.aichatbot.adapter.out.storage.AzureBlobStorageService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;

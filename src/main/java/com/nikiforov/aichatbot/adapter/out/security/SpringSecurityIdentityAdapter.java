@@ -1,18 +1,29 @@
 package com.nikiforov.aichatbot.adapter.out.security;
 
 import com.nikiforov.aichatbot.port.out.IdentityProviderPort;
-import com.nikiforov.aichatbot.service.security.SecurityUtils;
-import lombok.RequiredArgsConstructor;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 
+/**
+ * Adapter that provides the current authenticated user's email from Spring Security.
+ * <p>
+ * <strong>Null Safety:</strong> Returns {@code null} if no user is authenticated or if
+ * the authentication object is not available. Callers must handle null appropriately,
+ * typically by accepting anonymous feedback or throwing an unauthorized exception.
+ * <p>
+ * Previously wrapped SecurityUtils - inlined as part of Phase 10 cleanup.
+ */
 @Component
-@RequiredArgsConstructor
 public class SpringSecurityIdentityAdapter implements IdentityProviderPort {
-
-    private final SecurityUtils securityUtils;
 
     @Override
     public String getCurrentUserEmail() {
-        return securityUtils.getUserName();
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication != null && authentication.isAuthenticated() &&
+            !"anonymousUser".equals(authentication.getName())) {
+            return authentication.getName();
+        }
+        return null;
     }
 }
