@@ -18,8 +18,6 @@ spring:
       init:
         pull-model-strategy: never
 
-bot:
-  intro-text: "Test intro"
 
 rag:
   storage:
@@ -27,7 +25,7 @@ rag:
       url: ""
   llm:
     base-url: http://localhost:9999
-    api-key: test-key
+    api-key: ${TEST_API_KEY:-test-key}
     model: test/model
     max-documents: 3
   guide:

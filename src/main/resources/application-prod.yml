@@ -1,0 +1,66 @@
+spring:
+  application:
+    name: ai-helper-bot
+
+  # Production security configuration
+  management:
+    endpoints:
+      web:
+        exposure:
+          # Only expose health and info endpoints in production
+          include: health,info
+        base-path: /actuator
+    endpoint:
+      health:
+        # Show detailed health info (but not full environment details)
+        show-details: when-authorized
+        probes:
+          enabled: true
+      info:
+        enabled: true
+    # Disable sensitive endpoints
+    shutdown:
+      enabled: false
+
+  # JPA configuration for production
+  jpa:
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: false
+    open-in-view: false
+
+  # HikariCP connection pooling for production
+  datasource:
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle: 5
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+
+# Logging configuration for production
+logging:
+  level:
+    root: INFO
+    com.nikiforov.aichatbot: INFO
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} - %logger{36} - %level - %msg%n"
+  file:
+    name: logs/ai-helper-bot.log
+    max-size: 100MB
+    max-history: 30
+
+# Server configuration
+server:
+  # Enable response compression
+  compression:
+    enabled: true
+    mime-types: application/json,application/xml,text/html,text/xml,text/plain
+  # Tomcat production settings
+  tomcat:
+    threads:
+      max: 200
+      min-spare: 10
+    max-connections: 8192
+    accept-count: 100

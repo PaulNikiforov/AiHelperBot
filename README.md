@@ -5,7 +5,8 @@ Spring Boot 3.2.5 / Java 17 RAG (Retrieval-Augmented Generation) service for a P
 ## Prerequisites
 
 - Java 17+
-- PostgreSQL
+- PostgreSQL (local installation or Docker)
+- Docker & Docker Compose (for containerized development)
 - Ollama running locally (`http://localhost:11434`) with `nomic-embed-text` model
 - Azure Blob Storage account (optional — degraded mode if absent)
 
@@ -16,6 +17,9 @@ Copy `.env.example` to `.env` and fill in the values:
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `DB_PASSWORD` | Yes | PostgreSQL password for `bot_user` |
+| `DB_USERNAME` | No | PostgreSQL user (default: `bot_user`) |
+| `DB_HOST` | No | Database host (default: `localhost`, use `db` for Docker) |
+| `DB_PORT` | No | Database port (default: `5432`) |
 | `OPEN_ROUTER_API_KEY` | Yes | API key for the LLM provider (OpenRouter) |
 | `LLM_BASE_URL` | No | LLM API base URL (default: `https://openrouter.ai/api/v1`) |
 | `LLM_MODEL` | Yes | Model identifier (e.g. `openai/gpt-4o`) |
@@ -25,11 +29,16 @@ Copy `.env.example` to `.env` and fill in the values:
 
 ## Commands
 
+### Local Development
+
 ```cmd
+# Start PostgreSQL (Docker required)
+docker compose up -d
+
 # Build
 mvnw.cmd clean package
 
-# Run
+# Run (connects to containerized PostgreSQL)
 mvnw.cmd spring-boot:run
 
 # Run all tests
@@ -37,6 +46,22 @@ mvnw.cmd test
 
 # Run a single test class
 mvnw.cmd test -Dtest=ClassName
+
+# Stop PostgreSQL
+docker compose down
+```
+
+### Docker Deployment
+
+```cmd
+# Build and start all services (app + database)
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up --build
+
+# View logs
+docker compose logs -f app
+
+# Stop all services
+docker compose -f docker-compose.yml -f docker-compose.prod.yml down
 ```
 
 ## REST API
@@ -46,4 +71,3 @@ mvnw.cmd test -Dtest=ClassName
 | POST | `/api/v1/ask` | Ask a question; returns LLM answer |
 | POST | `/api/v1/botfeedback` | Save thumbs-up/down feedback |
 | GET | `/api/v1/botfeedback/{id}` | Retrieve feedback by ID |
-| GET | `/api/v1/bot/intro` | Get bot intro text |

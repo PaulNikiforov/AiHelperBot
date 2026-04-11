@@ -13,7 +13,7 @@
     <artifactId>aichatbot</artifactId>
     <version>0.0.1-SNAPSHOT</version>
     <name>ai-helper-bot</name>
-    <description>SAS AI Helper Bot — extracted RAG/LLM service</description>
+    <description>AI Helper Bot — RAG/LLM chatbot service</description>
 
     <properties>
         <java.version>17</java.version>
@@ -231,10 +231,37 @@
                 </configuration>
             </plugin>
 
+            <!-- Surefire: Unit tests (*Test.java) - runs during 'test' phase -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
                 <version>${maven-surefire-plugin.version}</version>
+                <configuration>
+                    <!-- Exclude integration tests from unit test run -->
+                    <excludes>
+                        <exclude>**/*IT.java</exclude>
+                    </excludes>
+                </configuration>
+            </plugin>
+
+            <!-- Failsafe: Integration tests (*IT.java) - runs during 'verify' phase -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-failsafe-plugin</artifactId>
+                <version>3.1.0</version>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>integration-test</goal>
+                            <goal>verify</goal>
+                        </goals>
+                    </execution>
+                </executions>
+                <configuration>
+                    <includes>
+                        <include>**/*IT.java</include>
+                    </includes>
+                </configuration>
             </plugin>
         </plugins>
     </build>

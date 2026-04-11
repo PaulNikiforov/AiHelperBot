@@ -133,6 +133,98 @@ instead of `/tmp`.
 ./mvnw test -Dtest=ClassName#methodName
 ```
 
+## Docker
+
+The project includes Docker Compose configuration for containerized PostgreSQL development and deployment.
+
+### Files
+
+| File | Purpose |
+|------|---------|
+| `docker-compose.yml` | Local development: PostgreSQL only |
+| `docker-compose.prod.yml` | Production: app + PostgreSQL |
+| `Dockerfile` | Multi-stage build for application |
+| `.dockerignore` | Optimizes build context |
+
+### Local Development Workflow
+
+```bash
+# Start PostgreSQL container
+docker compose up -d
+
+# The app is NOT in this compose file — developer runs it from IDE
+# App connects via: jdbc:postgresql://localhost:5432/ai_helper_bot_db
+
+# Stop PostgreSQL
+docker compose down
+```
+
+### Deployment Workflow
+
+```bash
+# Build and start all services (app + database)
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up --build
+
+# View logs
+docker compose logs -f app
+
+# Stop all services
+docker compose -f docker-compose.yml -f docker-compose.prod.yml down
+```
+
+### Environment Variables for Docker
+
+Required variables (see `.env.example`):
+- `DB_PASSWORD` — PostgreSQL password (required, no default)
+- `DB_USERNAME` — PostgreSQL user (default: `bot_user`)
+- `DB_HOST` — Database host (default: `localhost`, override to `db` for Docker)
+- `DB_PORT` — Database port (default: `5432`)
+- `OPEN_ROUTER_API_KEY` — LLM provider API key (required)
+- `LLM_BASE_URL` — LLM API base URL (default: `https://openrouter.ai/api/v1`)
+- `LLM_MODEL` — Model identifier (required)
+- `AZURE_BLOB_URL` — Azure Blob Storage (optional, degraded mode if absent)
+- `GUIDE_URL` — PDF user guide URL (optional)
+
+**Note:** The production compose files require `DB_PASSWORD` and `OPEN_ROUTER_API_KEY` to be set (error if missing).
+
+### Database Configuration
+
+**Container details:**
+- Image: `postgres:15.8-alpine` (pinned version)
+- Database: `ai_helper_bot_db`
+- User: `bot_user`
+- Port: `5432:5432`
+- Volume: `pgdata` (named volume for persistence)
+- Health check: `pg_isready` (10s interval, 5 retries)
+- Network: `ai-helper-bot-network`
+- Restart: `unless-stopped`
+
+**Application service:**
+- Base: `eclipse-temurin:17-jre`
+- User: `appuser` (non-root)
+- Port: `8080:8080`
+- Health check: `/actuator/health/liveness` (30s interval, 3 retries)
+- Depends on: `db` (healthy)
+- Restart: `unless-stopped`
+- Resource limits: 2 CPU / 1GB (max), 0.5 CPU / 512MB (reserved)
+
+### Dockerfile Details
+
+**Multi-stage build:**
+- **Stage 1 (build):** `eclipse-temurin:17-jdk`
+  - Copies `pom.xml`, `mvnw`, `.mvn/` first (layer caching)
+  - Runs `chmod +x mvnw` (Windows filesystem compatibility)
+  - Sets `MAVEN_OPTS="-Xmx512m"` (memory limits)
+  - Runs `./mvnw dependency:go-offline`
+  - Copies `src/` and builds: `./mvnw clean package -DskipTests`
+  - **Note:** Tests run in CI pipeline, not during image build (for speed)
+- **Stage 2 (runtime):** `eclipse-temurin:17-jre`
+  - Installs `curl` for health checks
+  - Creates `appuser` (non-root)
+  - Copies JAR from build stage
+  - Exposes port 8080
+  - Entry point: `java -jar app.jar`
+
 ## Architecture
 
 This is a Spring Boot 3.2.5 / Java 17 RAG (Retrieval-Augmented Generation) service for a Performance Management chatbot. It answers user questions by retrieving relevant chunks from a PDF user guide and sending a composed prompt to an external LLM API.
@@ -161,7 +253,7 @@ The domain core has **zero framework dependencies**. Hexagonal architecture migr
 - `InputValidationChain` — sequential validator execution, short-circuit on failure
 - `FormatValidator` — null/blank/length/letter checks
 
-**Port interfaces** (`port/in/`): `AskQuestionUseCase`, `SaveFeedbackUseCase`, `GetFeedbackUseCase`, `GetBotIntroUseCase`
+**Port interfaces** (`port/in/`): `AskQuestionUseCase`, `SaveFeedbackUseCase`, `GetFeedbackUseCase`
 **Port interfaces** (`port/out/`): `LlmPort`, `EmbeddingPort`, `VectorSearchPort`, `VectorIndexPort`, `FeedbackPersistencePort`, `DocumentStoragePort`, `LanguageDetectionPort`, `IdentityProviderPort`
 
 **Domain tests**: 65 tests in `src/test/java/.../domain/` — pure JUnit 5 + AssertJ, NO Spring, NO Mockito. Hand-written stubs implement port interfaces.
@@ -196,9 +288,8 @@ The domain core has **zero framework dependencies**. Hexagonal architecture migr
 |---------|----------|-------------------|
 | `BotQueryControllerAdapter` | POST `/api/v1/ask` | `AskQuestionUseCase`, `QuestionWebMapper` |
 | `BotFeedbackControllerAdapter` | POST/GET `/api/v1/botfeedback` | `SaveFeedbackUseCase`, `GetFeedbackUseCase`, `FeedbackWebMapper`, `IdentityProviderPort` |
-| `BotIntroControllerAdapter` | GET `/api/v1/bot/intro` | `GetBotIntroUseCase` |
 
-Web DTOs in `adapter/in/web/dto/`: `AskRequest`, `AskResponse`, `FeedbackRequest`, `FeedbackResponse`, `IntroResponse`.
+Web DTOs in `adapter/in/web/dto/`: `AskRequest`, `AskResponse`, `FeedbackRequest`, `FeedbackResponse`.
 Web mappers in `adapter/in/web/mapper/`: `QuestionWebMapper`, `FeedbackWebMapper` (MapStruct, `componentModel = "spring"`).
 
 `GlobalExceptionHandler` now handles domain exceptions: `FeedbackNotFoundException` → 404, `LlmUnavailableException` → 503. All error responses include `errorCode` + `message` fields.
@@ -208,8 +299,6 @@ Web mappers in `adapter/in/web/mapper/`: `QuestionWebMapper`, `FeedbackWebMapper
 ### Wiring Configuration (Phase 7)
 
 `BeanConfiguration` (`config/BeanConfiguration.java`) explicitly wires all domain services and use case ports via `@Bean` methods. No domain service has `@Component` — all are constructed in the configuration class.
-
-`BotIntroAdapter` (`adapter/in/config/BotIntroAdapter.java`) is a `@Component` implementing `GetBotIntroUseCase` — reads `BotProperties.introText`. This is the only adapter that is not a REST controller in the `adapter/in/` package.
 
 ### Integration Tests (Phase 8)
 
@@ -254,7 +343,6 @@ Run: `mvnw test -Dtest=HexagonalArchitectureTest`
 | POST | `/api/v1/ask` | `BotQueryControllerAdapter` | Ask a question; returns LLM answer |
 | POST | `/api/v1/botfeedback` | `BotFeedbackControllerAdapter` | Save thumbs-up/down feedback |
 | GET | `/api/v1/botfeedback/{id}` | `BotFeedbackControllerAdapter` | Retrieve feedback by ID |
-| GET | `/api/v1/bot/intro` | `BotIntroControllerAdapter` | Get bot intro text |
 
 **Note:** Old controllers were deleted in Phase 10. Only hexagonal adapters remain.
 

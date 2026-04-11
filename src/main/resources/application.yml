@@ -1,6 +1,6 @@
 spring:
   datasource:
-    url: jdbc:postgresql://localhost:5432/ai_helper_bot_db
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/ai_helper_bot_db
     username: ${DB_USERNAME:bot_user}
     password: ${DB_PASSWORD}
     hikari:
@@ -30,9 +30,6 @@ app:
   adapters:
     inbound:
       enabled: true
-
-bot:
-  intro-text: "Hello! I'm the AI Helper Bot. I can help you with your Performance Management questions."
 
 rag:
   storage:

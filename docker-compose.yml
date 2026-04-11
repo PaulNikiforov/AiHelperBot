@@ -1,0 +1,28 @@
+services:
+  db:
+    image: postgres:15.8-alpine
+    container_name: ai-helper-bot-db
+    environment:
+      POSTGRES_DB: ai_helper_bot_db
+      POSTGRES_USER: bot_user
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?error: DB_PASSWORD not set}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bot_user -d ai_helper_bot_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - ai-helper-bot-network
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+    driver: local
+
+networks:
+  ai-helper-bot-network:
+    driver: bridge

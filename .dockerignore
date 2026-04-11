@@ -1,0 +1,53 @@
+# Claude
+.claude/
+
+# Git
+.git/
+.gitignore
+
+# Build output
+target/
+
+# IDE
+.idea/
+*.iml
+*.iws
+*.ipr
+.classpath
+.factorypath
+.project
+.settings/
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Local vector store cache
+sas-rag/
+
+# Environment (secrets)
+.env
+.env.local
+.env.*.local
+
+# Docker
+docker-compose.yml
+docker-compose.prod.yml
+Dockerfile
+
+# Documentation
+*.md
+!README.md
+
+# Tests
+src/test/
+**/test/
+
+# Plans
+plans/
+reports/

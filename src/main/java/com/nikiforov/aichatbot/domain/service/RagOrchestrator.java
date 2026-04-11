@@ -44,6 +44,7 @@ public class RagOrchestrator implements AskQuestionUseCase {
         }
 
         QueryType queryType = queryClassifier.classify(question.text());
+        // TODO: use queryType for type-specific retrieval (Plan 2, Phase 20)
         List<DocumentChunk> candidates = vectorSearch.search(question.text(), 20);
         List<DocumentChunk> ranked = documentRanker.rankByKeywords(candidates, question.text(), 5);
 

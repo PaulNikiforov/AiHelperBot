@@ -1,3 +1,5 @@
+# Note: /ask/stream endpoint is planned but not yet implemented (see Plan 2, Phase 15)
+
 openapi: 3.1.0
 
 info:
@@ -7,7 +9,7 @@ info:
     organizational processes using Retrieval-Augmented Generation (RAG).
   version: 2.0.0
   contact:
-    name: Solbeg SAS Team
+    name: AI Helper Bot Team
 
 servers:
   - url: http://localhost:8080
@@ -190,31 +192,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
-  /api/v1/bot/intro:
-    get:
-      operationId: getBotIntro
-      summary: Get bot intro text
-      tags: [Bot]
-      responses:
-        '200':
-          description: Bot intro text
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/IntroResponse'
-        '401':
-          description: Missing or invalid API key
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '500':
-          description: Unexpected server error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-
 components:
   securitySchemes:
     ApiKeyAuth:
@@ -290,12 +267,6 @@ components:
         createdAt:
           type: string
           format: date-time
-
-    IntroResponse:
-      type: object
-      properties:
-        introText:
-          type: string
 
     ErrorCode:
       type: string
