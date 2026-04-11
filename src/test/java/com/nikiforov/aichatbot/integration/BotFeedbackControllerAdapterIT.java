@@ -2,6 +2,7 @@ package com.nikiforov.aichatbot.integration;
 
 import com.nikiforov.aichatbot.adapter.in.web.dto.FeedbackRequest;
 import com.nikiforov.aichatbot.adapter.in.web.dto.FeedbackResponse;
+import com.nikiforov.aichatbot.config.TestSecurityConfig;
 import com.nikiforov.aichatbot.domain.model.FeedbackType;
 import com.nikiforov.aichatbot.adapter.out.storage.AzureBlobStorageService;
 import org.junit.jupiter.api.Test;
@@ -11,6 +12,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+import org.springframework.context.annotation.Import;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.test.context.TestPropertySource;
@@ -22,6 +24,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@Import(TestSecurityConfig.class)
 @Testcontainers
 @Transactional
 @TestPropertySource(properties = {

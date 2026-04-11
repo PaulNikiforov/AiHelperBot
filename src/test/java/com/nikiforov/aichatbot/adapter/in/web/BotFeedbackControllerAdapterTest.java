@@ -13,6 +13,7 @@ import com.nikiforov.aichatbot.port.in.SaveFeedbackUseCase;
 import com.nikiforov.aichatbot.port.out.IdentityProviderPort;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.autoconfigure.security.oauth2.resource.servlet.OAuth2ResourceServerAutoConfiguration;
 import org.springframework.boot.autoconfigure.security.servlet.SecurityAutoConfiguration;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
@@ -30,7 +31,10 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@WebMvcTest(value = BotFeedbackControllerAdapter.class, excludeAutoConfiguration = SecurityAutoConfiguration.class)
+@WebMvcTest(value = BotFeedbackControllerAdapter.class, excludeAutoConfiguration = {
+        SecurityAutoConfiguration.class,
+        OAuth2ResourceServerAutoConfiguration.class
+})
 @TestPropertySource(properties = "app.adapters.inbound.enabled=true")
 class BotFeedbackControllerAdapterTest {
 

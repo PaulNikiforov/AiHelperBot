@@ -1,0 +1,40 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:testdb;MODE=PostgreSQL
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    show-sql: false
+    open-in-view: false
+  liquibase:
+    enabled: false
+  ai:
+    ollama:
+      base-url: http://localhost:11434
+      embedding:
+        enabled: false
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          # Disable JWT validation in tests by using a mock issuer
+          # The spring-security-test framework will mock the JWT directly
+          issuer-uri: http://test-issuer.example.com
+
+app:
+  adapters:
+    inbound:
+      enabled: true
+
+rag:
+  storage:
+    blob:
+      url: ""
+  llm:
+    base-url: http://test-llm.example.com
+    api-key: test-key
+    model: test-model
+    max-documents: 5
