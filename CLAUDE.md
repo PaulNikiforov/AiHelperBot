@@ -274,7 +274,9 @@ The domain core has **zero framework dependencies**. Hexagonal architecture migr
 | `AzureBlobStorageAdapter` | `adapter/out/storage/` | `AzureBlobStorageService` | `DocumentStoragePort` |
 | `LinguaLanguageAdapter` | `adapter/out/language/` | Lingua `LanguageDetector` | `LanguageDetectionPort` |
 | `OllamaEmbeddingAdapter` | `adapter/out/embedding/` | Spring AI `EmbeddingModel` | `EmbeddingPort` |
-| `SpringSecurityIdentityAdapter` | `adapter/out/security/` | `SecurityUtils` | `IdentityProviderPort` |
+| `SpringSecurityIdentityAdapter` | `adapter/out/security/` | `SecurityContextHolder` | `IdentityProviderPort` |
+| `KeycloakJwtConverter` | `adapter/in/web/security/` | JWT claims → authorities | `Converter<Jwt, AuthenticationToken>` |
+| `SecurityConfig` | `adapter/in/web/security/` | OAuth2 Resource Server, RBAC | `@Configuration` |
 
 `FeedbackPersistenceMapper` (MapStruct) maps domain `Feedback` ↔ JPA `BotFeedback` at the adapter boundary.
 
@@ -346,7 +348,7 @@ Run: `mvnw test -Dtest=HexagonalArchitectureTest`
 
 **Note:** Old controllers were deleted in Phase 10. Only hexagonal adapters remain.
 
-Security: CSRF disabled, all endpoints permit all (no authentication required). Authenticated user email is read from `SecurityContextHolder` by `SpringSecurityIdentityAdapter` → `IdentityProviderPort` when saving feedback.
+Security: JWT authentication via Keycloak OAuth2 Resource Server. All `/api/v1/**` endpoints require authentication. Role-based authorization via `@PreAuthorize` and `@EnableMethodSecurity`. Swagger UI restricted to admin users in production profile. JWK Set caching enabled for performance.
 
 ### RAG Pipeline (core flow)
 
@@ -438,7 +440,7 @@ All subsequent queries hit the **in-memory** `CustomSimpleVectorStore` (extends 
 
 ### Key Configuration
 
-Config prefix is `rag` for RAG properties and `bot` for bot properties.
+Config prefix is `rag` for RAG properties and `bot` for bot properties. JWT/Keycloak properties use `spring.security.oauth2.resourceserver.jwt`.
 
 | Property | Purpose |
 |---|---|
@@ -460,6 +462,9 @@ Config prefix is `rag` for RAG properties and `bot` for bot properties.
 | `spring.datasource.password` | `${DB_PASSWORD}` — env variable for DB password |
 | `spring.jpa.open-in-view` | `false` — prevents lazy loading in controllers |
 | `spring.datasource.hikari.*` | Connection pool settings (max=20, min-idle=5) |
+| `spring.security.oauth2.resourceserver.jwt.issuer-uri` | Keycloak issuer URL (`${KEYCLOAK_ISSUER_URI}`) |
+| `spring.security.oauth2.resourceserver.jwt.jwk-set-uri` | Keycloak JWK certificates endpoint (`${KEYCLOAK_JWK_URI}`) |
+| `spring.security.oauth2.resourceserver.jwt.cache.enabled` | JWK Set caching for performance (default: `true`) |
 
 # Security Rules
 

@@ -15,6 +15,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -37,6 +38,7 @@ public class BotFeedbackControllerAdapter {
     @Operation(summary = "Save bot feedback")
     @ApiResponse(responseCode = "201", description = "Bot feedback saved")
     @PostMapping
+    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<FeedbackResponse> saveBotFeedback(@Valid @RequestBody FeedbackRequest request) {
         String employeeEmail = identityProviderPort.getCurrentUserEmail();
         var feedback = saveFeedbackUseCase.save(

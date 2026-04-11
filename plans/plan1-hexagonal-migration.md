@@ -776,3 +776,40 @@ Following the completion of hexagonal migration, additional cleanup and Docker i
 - `mvn verify` — runs all tests including integration (`*IT.java`)
 
 **Result:** Production-ready Docker infrastructure with security hardening.
+
+### Phase C: JWT Authentication with Keycloak
+
+**Status:** ✅ COMPLETE (2026-04-11)
+
+**Files Created:**
+- `infra/keycloak/realm-export.json` — Keycloak realm configuration with clients, roles, test users
+- `adapter/in/web/security/KeycloakJwtConverter.java` — JWT to AuthenticationToken converter with role extraction
+- `adapter/in/web/security/SecurityConfig.java` — OAuth2 Resource Server configuration (moved from `config/`)
+- `config/TestSecurityConfig.java` — Test configuration permitting all requests
+- `src/test/java/.../security/*Test.java` — JWT security tests (3 test classes, 24 tests)
+- `src/main/resources/application-test.yml` — Test profile configuration
+
+**Files Modified:**
+- `docker-compose.yml` — Added Keycloak service with PostgreSQL dependency
+- `.env.example` — Added Keycloak environment variables (`KEYCLOAK_ISSUER_URI`, `KEYCLOAK_JWK_URI`)
+- `pom.xml` — Added `spring-boot-starter-oauth2-resource-server`
+- `application.yml` — Added JWT configuration with JWK caching
+- `adapter/out/security/SpringSecurityIdentityAdapter.java` — Enhanced email extraction from JWT claims
+- `adapter/in/web/BotFeedbackControllerAdapter.java` — Added `@PreAuthorize("isAuthenticated()")`
+- Integration tests — Added `@Import(TestSecurityConfig.class)`
+
+**Security Improvements (P1/P2/P3 fixes from review):**
+- Null safety checks for JWT subject claim
+- Type validation for role claims with logging for malformed JWTs
+- Role-based authorization via `@EnableMethodSecurity`
+- JWK Set caching enabled for performance
+- Production profile restrictions on Swagger UI (admin-only)
+- Removed unnecessary `SecurityUtils.java` class
+- Enhanced JavaDoc on `IdentityProviderPort` for null handling
+
+**Test Results:**
+- 24 security tests passing (JwtSecurityConfigTest, KeycloakJwtConverterTest, SpringSecurityIdentityAdapterTest)
+- Integration tests compile and require Docker environment for execution
+- All ArchUnit rules pass (hexagonal architecture maintained)
+
+**Result:** JWT authentication infrastructure complete with Keycloak integration. All endpoints require valid JWT tokens.

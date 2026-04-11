@@ -15,8 +15,11 @@
 
 ## Phase 12: API Key Authentication & Security
 
+**Note:** Phase C implemented JWT authentication with Keycloak OAuth2 Resource Server. This phase adds API key authentication as an alternative auth mechanism for service-to-service communication.
+
 ### Step 12.1 — Add Spring Security filter chain configuration for API key auth
-- Update `config/SecurityConfiguration.java` to add a custom filter that reads `X-API-Key` header
+- Security infrastructure exists at `adapter/in/web/security/SecurityConfig.java`
+- Add a custom filter that reads `X-API-Key` header
 - For now, accept a single static API key from configuration as a placeholder (TenantConfigPort replaces it in Phase 14)
 - Write test: request without API key returns 401
 - Write test: request with valid API key passes through
