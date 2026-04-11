@@ -423,37 +423,507 @@
 
 ---
 
-## Phase G: Final Verification & Documentation
+## Phase G: CORS & Reverse Proxy (Caddy)
 
-### Step G.1 — Run full test suite
-- `./mvnw test` — all unit, contract, integration, architecture tests pass
+> Configure CORS for multi-client access (web, mobile, Telegram bot) and add Caddy as a reverse proxy with automatic HTTPS.
+
+### Step G.1 — Configure CORS in Spring Security
+- Add CORS configuration to `SecurityConfig`:
+  ```java
+  @Bean
+  CorsConfigurationSource corsConfigurationSource() { ... }
+  ```
+- Allowed origins from config: `app.cors.allowed-origins` (list)
+  - Default: `http://localhost:3000` (dev web frontend)
+  - Production: set via `${CORS_ALLOWED_ORIGINS}` env var (comma-separated)
+- Allowed methods: `GET, POST, PUT, DELETE, OPTIONS`
+- Allowed headers: `Authorization, Content-Type, X-API-Key`
+- Expose headers: `X-Request-Id` (for tracing)
+- `allowCredentials: true`
+- Write test: preflight `OPTIONS` request returns correct CORS headers
+- Write test: request from disallowed origin is rejected
+- Write test: request from allowed origin passes
+
+### Step G.2 — Add Caddy to production Docker Compose
+- Create `infra/caddy/Caddyfile`:
+  ```
+  {$DOMAIN:localhost} {
+      reverse_proxy app:8080
+      encode gzip
+      log {
+          output stdout
+          format json
+      }
+  }
+  ```
+- Caddy automatically provisions Let's Encrypt certificates when `DOMAIN` is a real domain
+- For local dev, falls back to self-signed or plain HTTP
+- Add `caddy` service to `docker-compose.prod.yml`:
+  - Image: `caddy:2-alpine`
+  - Ports: `80:80`, `443:443`
+  - Volumes: `caddy_data` (certificates), `caddy_config`, Caddyfile mount
+  - Depends on: `app`
+- App container no longer exposes port 8080 externally in prod — only Caddy does
+
+### Step G.3 — Add `DOMAIN` and `CORS_ALLOWED_ORIGINS` to `.env.example`
+- `DOMAIN=` — production domain (e.g., `api.mybot.com`)
+- `CORS_ALLOWED_ORIGINS=` — comma-separated allowed origins
+- Document: if `DOMAIN` is empty, Caddy serves on HTTP only (dev mode)
+
+---
+
+## Phase H: Logging & Error Tracking
+
+> Set up dual-format logging (text for dev, JSON for prod) and integrate Sentry for real-time error tracking.
+
+### Step H.1 — Configure Logback for dual-format output
+- Create `src/main/resources/logback-spring.xml`:
+  ```xml
+  <springProfile name="dev,default">
+      <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+          <!-- Standard text pattern: timestamp level logger message -->
+      </appender>
+  </springProfile>
+  <springProfile name="prod">
+      <appender name="JSON_CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+          <encoder class="net.logstash.logback.encoder.LogstashEncoder"/>
+      </appender>
+  </springProfile>
+  ```
+- Add `logstash-logback-encoder` dependency to `pom.xml`:
+  ```xml
+  <dependency>
+      <groupId>net.logstash.logback</groupId>
+      <artifactId>logstash-logback-encoder</artifactId>
+      <version>7.4</version>
+  </dependency>
+  ```
+- JSON log fields: `timestamp`, `level`, `logger`, `message`, `thread`, `traceId`, `spanId`
+- Dev profile: human-readable text (current behavior)
+- Prod profile: JSON (one line per log event, parseable by Loki/ELK)
+
+### Step H.2 — Add request context to logs (MDC)
+- Create `adapter/in/web/filter/RequestIdFilter.java` (servlet filter)
+- Generates `X-Request-Id` (UUID) for each request, or reads from incoming header
+- Puts `requestId`, `userEmail` (from JWT if present) into MDC
+- Returns `X-Request-Id` in response header
+- JSON logs automatically include MDC fields
+- Write test: response contains `X-Request-Id` header
+- Write test: MDC is cleaned up after request
+
+### Step H.3 — Add Grafana + Loki to production Docker Compose
+- Add to `docker-compose.prod.yml`:
+  - **Loki** container (`grafana/loki:2.9.0`):
+    - Port: `3100` (internal only)
+    - Config: `infra/loki/loki-config.yml` (local filesystem storage, 30-day retention)
+  - **Promtail** container (`grafana/promtail:2.9.0`):
+    - Reads Docker container logs via Docker socket mount
+    - Ships to Loki
+    - Config: `infra/promtail/promtail-config.yml`
+  - **Grafana** container (`grafana/grafana:10.0`):
+    - Port: `3000:3000`
+    - Pre-configured datasources: Loki + Prometheus
+    - Admin password from `${GRAFANA_ADMIN_PASSWORD:-admin}`
+    - Volume: `grafana_data` for persistence
+- Create `infra/grafana/provisioning/datasources/datasources.yml` with Loki and Prometheus pre-configured
+
+### Step H.4 — Integrate Sentry for error tracking
+- Add Sentry Spring Boot dependency:
+  ```xml
+  <dependency>
+      <groupId>io.sentry</groupId>
+      <artifactId>sentry-spring-boot-starter-jakarta</artifactId>
+      <version>7.6.0</version>
+  </dependency>
+  ```
+- Add to `application.yml`:
+  ```yaml
+  sentry:
+    dsn: ${SENTRY_DSN:}
+    environment: ${SPRING_PROFILES_ACTIVE:dev}
+    traces-sample-rate: 0.1
+    send-default-pii: false
+  ```
+- If `SENTRY_DSN` is empty — Sentry is disabled (no-op), no errors on startup
+- Add `SENTRY_DSN` to `.env.example`
+- `send-default-pii: false` — do not send user emails/IPs to Sentry
+
+### Step H.5 — Enrich Sentry events with context
+- Create `adapter/out/observability/SentryUserFilter.java`:
+  - Sets Sentry user context from JWT (anonymized — user ID only, no email)
+  - Sets `requestId` tag from MDC
+- Update `GlobalExceptionHandler`:
+  - On 5xx errors, call `Sentry.captureException(ex)`
+  - On 4xx errors — do NOT send to Sentry (reduce noise)
+- Write test: 500 error triggers Sentry capture (mock Sentry hub)
+- Write test: 400 error does NOT trigger Sentry capture
+
+---
+
+## Phase I: Resilience & Timeouts
+
+> Protect the application from cascading failures when external services are slow or unavailable.
+
+### Step I.1 — Configure graceful shutdown
+- Add to `application.yml`:
+  ```yaml
+  server:
+    shutdown: graceful
+  spring:
+    lifecycle:
+      timeout-per-shutdown-phase: 30s
+  ```
+- In-flight requests get up to 30 seconds to complete before the JVM exits
+- Update Dockerfile: add `STOPSIGNAL SIGTERM` (Docker sends SIGTERM, Spring catches it)
+- Write test: verify `server.shutdown` property is set
+
+### Step I.2 — Add LLM call timeout
+- Add config property: `rag.llm.timeout-seconds: ${LLM_TIMEOUT:30}` (default 30s)
+- Update `LlmClient` / `OpenRouterLlmAdapter`:
+  - Set `WebClient` connect timeout: 5 seconds
+  - Set read timeout: `timeout-seconds` from config
+  - On timeout, throw `LlmUnavailableException` with clear message
+- Write test: LLM call exceeding timeout throws `LlmUnavailableException`
+- Write test: LLM call within timeout returns normally
+
+### Step I.3 — Add Ollama embedding timeout
+- Update `OllamaEmbeddingAdapter`:
+  - Set timeout for embedding calls: 10 seconds (embeddings are fast)
+  - On timeout, throw descriptive exception
+- Write test: embedding timeout is handled gracefully
+
+### Step I.4 — Implement exponential backoff with alerting for LLM failures
+- Create `adapter/out/llm/LlmCircuitBreaker.java`:
+  - Wraps `LlmPort` with retry logic
+  - Retry strategy: exponential backoff (1s → 2s → 4s → 8s → 16s → 32s → 60s cap)
+  - After 10 consecutive failures:
+    - Log CRITICAL alert: `"LLM service unavailable after 10 retries"`
+    - Send Sentry alert (if configured)
+    - Increment Prometheus counter `rag.llm.circuit_breaker.open`
+    - Enter "open" state — immediately return 503 for subsequent requests for 60 seconds
+  - After cooldown, try one request ("half-open" state)
+  - On success, reset failure counter ("closed" state)
+- Wire as a decorator around `LlmPort` in `BeanConfiguration`
+- Write test: first failure retries with backoff
+- Write test: 10 failures opens circuit, returns 503 immediately
+- Write test: circuit resets after cooldown + successful probe
+
+### Step I.5 — Add request body size limit
+- Add to `application.yml`:
+  ```yaml
+  spring:
+    servlet:
+      multipart:
+        max-request-size: 1MB
+        max-file-size: 1MB
+  server:
+    tomcat:
+      max-http-form-post-size: 1MB
+      max-swallow-size: 1MB
+  ```
+- The `@Size(max=4000)` on question DTO already limits question text — this is an additional guard at the HTTP layer
+- Write test: request body exceeding 1MB returns 413 Payload Too Large
+
+---
+
+## Phase J: Data Management
+
+> Implement database backups, data retention policies, and pagination for list endpoints.
+
+### Step J.1 — Create PostgreSQL backup script
+- Create `infra/backup/pg-backup.sh`:
+  ```bash
+  #!/usr/bin/env bash
+  TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+  pg_dump -h db -U "$DB_USERNAME" "$DB_NAME" | gzip > "/backups/ai_helper_bot_${TIMESTAMP}.gz"
+  # Rotate: delete backups older than 30 days
+  find /backups -name "*.gz" -mtime +30 -delete
+  ```
+- Add backup container to `docker-compose.prod.yml`:
+  - Uses `postgres:15-alpine` image (has `pg_dump` built in)
+  - Runs `pg-backup.sh` via cron (daily at 02:00)
+  - Volume: `db_backups:/backups` (named volume, persists on host)
+  - Shares network with `db` container
+  - Environment: `DB_USERNAME`, `DB_PASSWORD`, `DB_NAME`
+- **How it works:** The backup container runs continuously with `crond` as its entrypoint. Each day at 02:00 it executes `pg_dump` against the PostgreSQL container, compresses the output with gzip, and saves it to a mounted volume. Backups older than 30 days are automatically deleted.
+
+### Step J.2 — Document backup and restore procedures
+- Add to README:
+  - **Backup location:** Docker volume `db_backups` → mapped to host path
+  - **Manual backup:** `docker compose exec backup /scripts/pg-backup.sh`
+  - **Restore:** `gunzip -c backup.gz | docker compose exec -T db psql -U bot_user ai_helper_bot_db`
+  - **Verify:** `docker compose exec db psql -U bot_user -c "SELECT count(*) FROM bot_feedback;"`
+  - **Copy to host:** `docker cp <container>:/backups/. ./backups/`
+
+### Step J.3 — Implement data retention service
+- Create `domain/service/DataRetentionPolicy.java`:
+  - Configurable retention period: `app.retention.feedback-days: ${RETENTION_FEEDBACK_DAYS:365}` (default 1 year)
+  - Configurable max table size: `app.retention.feedback-max-rows: ${RETENTION_FEEDBACK_MAX_ROWS:100000}`
+- Create `port/out/FeedbackCleanupPort.java`:
+  - `int deleteOlderThan(LocalDateTime cutoff)`
+  - `long countAll()`
+- Add method to `FeedbackPersistenceAdapter` implementing `FeedbackCleanupPort`
+- Create `adapter/out/scheduler/DataRetentionScheduler.java` (`@Scheduled`):
+  - Runs daily at 03:00 (after backups)
+  - Deletes feedback older than retention period
+  - If row count exceeds max, deletes oldest rows beyond the limit
+  - Logs how many rows were deleted
+- Write test: records older than cutoff are deleted
+- Write test: records within cutoff are preserved
+- Write test: max-rows limit triggers cleanup of oldest excess rows
+
+### Step J.4 — Add pagination to feedback list endpoint
+- Create new endpoint: `GET /api/v1/botfeedback?page=0&size=20&sort=createdAt,desc`
+- Add `GetFeedbackListUseCase` inbound port:
+  - Method: `Page<Feedback> findAll(int page, int size, String sortBy, String direction)`
+- Implement in `FeedbackService`
+- Add `findAll(Pageable)` to `FeedbackPersistencePort`
+- Implement in `FeedbackPersistenceAdapter` via Spring Data `Pageable`
+- Create `FeedbackPageResponse` DTO with pagination metadata:
+  ```json
+  {
+    "content": [...],
+    "page": 0,
+    "size": 20,
+    "totalElements": 142,
+    "totalPages": 8
+  }
+  ```
+- Update `BotFeedbackControllerAdapter` with new mapping
+- Write test: returns paginated results with correct metadata
+- Write test: default page size is 20
+- Write test: sort by `createdAt` desc works
+- Update OpenAPI spec with new endpoint
+
+---
+
+## Phase K: Environment Profiles & Secret Management
+
+> Set up dev/prod Spring profiles and migrate from `.env` files to Docker Secrets.
+
+### Step K.1 — Create Spring profiles
+- Create `application-dev.yml`:
+  ```yaml
+  spring.jpa.show-sql: true
+  logging.level.com.nikiforov.aichatbot: DEBUG
+  sentry.dsn: ""  # disabled in dev
+  ```
+- Create `application-prod.yml`:
+  ```yaml
+  spring.jpa.show-sql: false
+  logging.level.com.nikiforov.aichatbot: INFO
+  logging.level.root: WARN
+  server.shutdown: graceful
+  ```
+- Set default profile in `application.yml`: `spring.profiles.active: ${SPRING_PROFILES_ACTIVE:dev}`
+
+### Step K.2 — Migrate to Docker Secrets for sensitive values
+- **What are Docker Secrets:** Files mounted into the container at `/run/secrets/<name>`. More secure than env vars — not visible in `docker inspect`, not leaked in process listings or logs.
+- Update `docker-compose.prod.yml`:
+  ```yaml
+  services:
+    app:
+      secrets:
+        - db_password
+        - openrouter_api_key
+        - sentry_dsn
+  secrets:
+    db_password:
+      file: ./secrets/db_password.txt
+    openrouter_api_key:
+      file: ./secrets/openrouter_api_key.txt
+    sentry_dsn:
+      file: ./secrets/sentry_dsn.txt
+  ```
+- Each secret is a plain text file with just the value (no `KEY=value`, no newline)
+- Create `secrets/` directory, add to `.gitignore`
+- Create `secrets/.example/` with empty placeholder files
+
+### Step K.3 — Read Docker Secrets in Spring Boot
+- Spring Boot can read secrets as files. Add to `application-prod.yml`:
+  ```yaml
+  spring:
+    config:
+      import: optional:configtree:/run/secrets/
+  ```
+- Or use `spring.datasource.password: ${DB_PASSWORD:}` and set `DB_PASSWORD_FILE=/run/secrets/db_password` with a config processor
+- **Simpler approach:** Use Spring Boot's built-in `configtree` import — file name becomes property name:
+  - `/run/secrets/db_password` → `db-password` property
+  - Map in `application-prod.yml`: `spring.datasource.password: ${db-password}`
+- Write test: app starts with secrets from file (integration test with temp files)
+
+### Step K.4 — Update local dev to still use `.env`
+- `docker-compose.yml` (dev) keeps using `.env` — no secrets infrastructure needed for local dev
+- `docker-compose.prod.yml` (prod) uses Docker Secrets
+- Document the difference in README
+
+---
+
+## Phase L: CI/CD with GitHub Actions
+
+> Set up automated testing and Docker image build on push.
+
+### Step L.1 — Create test workflow
+- Create `.github/workflows/test.yml`:
+  ```yaml
+  name: Test
+  on: [push, pull_request]
+  jobs:
+    test:
+      runs-on: ubuntu-latest
+      services:
+        postgres:
+          image: postgres:15
+          env:
+            POSTGRES_DB: ai_helper_bot_db
+            POSTGRES_USER: bot_user
+            POSTGRES_PASSWORD: test
+          ports: ["5432:5432"]
+          options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
+      steps:
+        - uses: actions/checkout@v4
+        - uses: actions/setup-java@v4
+          with:
+            distribution: temurin
+            java-version: 17
+            cache: maven
+        - run: ./mvnw verify
+          env:
+            DB_PASSWORD: test
+            OPEN_ROUTER_API_KEY: fake-key-for-tests
+  ```
+- Runs all unit + integration + architecture tests on every push and PR
+
+### Step L.2 — Create Docker build & push workflow
+- Create `.github/workflows/docker.yml`:
+  ```yaml
+  name: Docker Build
+  on:
+    push:
+      branches: [main]
+      tags: ["v*"]
+  jobs:
+    build:
+      runs-on: ubuntu-latest
+      steps:
+        - uses: actions/checkout@v4
+        - uses: docker/setup-buildx-action@v3
+        - uses: docker/login-action@v3
+          with:
+            registry: ghcr.io
+            username: ${{ github.actor }}
+            password: ${{ secrets.GITHUB_TOKEN }}
+        - uses: docker/build-push-action@v5
+          with:
+            push: true
+            tags: ghcr.io/${{ github.repository }}:${{ github.sha }}
+            cache-from: type=gha
+            cache-to: type=gha,mode=max
+  ```
+- Builds Docker image and pushes to GitHub Container Registry (ghcr.io)
+- Only on `main` branch and version tags
+- Uses GitHub Actions cache for Docker layers
+
+### Step L.3 — Add build status badge to README
+- Add badge at the top of README: `![Tests](https://github.com/<owner>/<repo>/actions/workflows/test.yml/badge.svg)`
+
+---
+
+## Phase M: Documentation
+
+> Create comprehensive README in Russian and English for non-technical stakeholders (PM, BA).
+
+### Step M.1 — Create `README.md` (English)
+- Structure:
+  1. **Project Overview** — what the bot does, architecture diagram (text-based)
+  2. **Quick Start (for developers)**
+     - Prerequisites: Java 17, Docker, Git
+     - Clone, `docker compose up -d`, `./mvnw spring-boot:run`
+     - Verify: `curl http://localhost:8080/actuator/health`
+  3. **API Reference** — all endpoints with curl examples
+     - How to get a JWT token from Keycloak
+     - Example: ask a question, save feedback, get feedback
+  4. **Configuration** — all env variables with descriptions and defaults
+  5. **Docker Deployment**
+     - Dev: `docker compose up -d` (PostgreSQL + Keycloak only)
+     - Prod: `docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d`
+     - Secret management with Docker Secrets
+  6. **Monitoring**
+     - Health check URL
+     - Prometheus scraping endpoint
+     - Grafana dashboards
+     - Sentry error tracking
+  7. **Backup & Restore** — step-by-step with commands
+  8. **Troubleshooting** — common issues and solutions
+     - App can't connect to DB
+     - Keycloak realm not imported
+     - Ollama not running
+     - LLM API key invalid
+  9. **Architecture** — hexagonal architecture overview, package map
+  10. **Contributing** — how to run tests, code style, PR process
+
+### Step M.2 — Create `README.ru.md` (Russian)
+- Full translation of `README.md`
+- Same structure, same examples
+- Link from `README.md`: "🇷🇺 [Русская версия](README.ru.md)"
+- Link from `README.ru.md`: "🇬🇧 [English version](README.md)"
+
+### Step M.3 — Create architecture diagram
+- Create `docs/architecture.md` with text-based diagram:
+  ```
+  Client → Caddy (HTTPS) → Spring Boot App → PostgreSQL
+                                ├── Keycloak (JWT validation)
+                                ├── OpenRouter (LLM)
+                                ├── Ollama (embeddings)
+                                └── Azure Blob / Local FS
+  ```
+- Include hexagonal architecture diagram (ports & adapters)
+- Reference from both READMEs
+
+---
+
+## Phase N: Final Verification
+
+### Step N.1 — Run full test suite
+- `./mvnw verify` — all unit, contract, integration, architecture tests pass
 - Verify no test relies on `permitAll()` security (all updated for JWT mock)
 
-### Step G.2 — Verify local dev workflow end-to-end
+### Step N.2 — Verify local dev workflow end-to-end
 1. `docker compose up -d` — starts PostgreSQL + Keycloak
 2. Keycloak auto-imports realm
-3. `./mvnw spring-boot:run` — app starts, Liquibase runs
-4. Obtain JWT: `POST http://localhost:8180/realms/ai-helper-bot/protocol/openid-connect/token` with client credentials
+3. `./mvnw spring-boot:run -Dspring.profiles.active=dev` — app starts, Liquibase runs
+4. Obtain JWT: `POST http://localhost:8180/realms/ai-helper-bot/protocol/openid-connect/token`
 5. `POST /api/v1/ask` with `Authorization: Bearer <jwt>` — returns answer
 6. `POST /api/v1/ask` without token — returns 401
+7. `GET /actuator/health` — returns UP
+8. `GET /actuator/info` — returns build info
 
-### Step G.3 — Verify deployment workflow end-to-end
-1. `docker compose -f docker-compose.yml -f docker-compose.prod.yml up --build`
-2. All three containers start (PostgreSQL, Keycloak, app)
-3. Same token flow works against `http://localhost:8080`
+### Step N.3 — Verify production deployment end-to-end
+1. Create secret files in `secrets/`
+2. `docker compose -f docker-compose.yml -f docker-compose.prod.yml up --build -d`
+3. Verify all containers start: PostgreSQL, Keycloak, app, Caddy, Loki, Promtail, Grafana, backup
+4. HTTPS works via Caddy
+5. Grafana shows logs from Loki and metrics from Prometheus
+6. Sentry test: trigger a 500 error, verify it appears in Sentry dashboard
 
-### Step G.4 — Update CLAUDE.md
+### Step N.4 — Update CLAUDE.md
 - Add Docker section (commands to start/stop containers)
 - Add Keycloak section (realm, clients, test user)
 - Add auth section (JWT + API key strategy, public vs protected endpoints)
 - Add Actuator section (exposed endpoints, security, Prometheus scraping)
 - Add storage section (local vs Azure modes)
-- Update REST API table with auth requirements
+- Add CORS section (configuration, allowed origins)
+- Add logging section (dev text vs prod JSON, Loki, Sentry)
+- Add resilience section (timeouts, circuit breaker, graceful shutdown)
+- Add data management section (backups, retention, pagination)
+- Update REST API table with auth requirements and new endpoints
 - Remove any stale references
 
-### Step G.5 — Update ArchUnit tests
+### Step N.5 — Update ArchUnit tests
 - Add rule: security adapters (`adapter/in/web/security/`) don't depend on domain services
 - Add rule: `KeycloakJwtConverter` only depends on Spring Security types
+- Add rule: scheduler classes are in `adapter/out/scheduler/`
+- Add rule: filter classes are in `adapter/in/web/filter/`
 - Verify all existing 13 rules still pass
 
 ---
@@ -467,19 +937,30 @@ This plan establishes the foundation that Plan 2 builds on:
 | Phase C: JWT auth | Phase 12: API key auth plugs into the same filter chain |
 | Phase D: Dual auth architecture | Phase 13: Multi-tenancy resolves tenant from API key |
 | Phase B: Docker + PostgreSQL | Phase 13: Tenant/API key entities need a real database |
-| Phase B: Dockerfile | Phase 19: Observability needs containerized deployment |
 | Phase E: Actuator health + Prometheus | Phase 19: Custom metrics and health indicators build on top |
 | Phase F: Storage abstraction | Phase 20: Document source management per tenant |
+| Phase G: CORS | Phase 15: Streaming SSE needs CORS for EventSource clients |
+| Phase H: Structured logging + Sentry | Phase 18: Question analytics logs integrate with Loki |
+| Phase I: LLM circuit breaker | Phase 14: LLM provider chain uses same resilience patterns |
+| Phase J: Data retention | Phase 18: Question log needs same retention policies |
+| Phase L: GitHub Actions CI | All phases: automated test validation on every change |
 
 **Execution order:**
-1. Plan 3, Phase A (cleanup) — immediate
-2. Plan 3, Phase B (Docker) — immediate
+1. Plan 3, Phase A (cleanup) — immediate ✅
+2. Plan 3, Phase B (Docker) — immediate ✅
 3. Plan 3, Phase C (JWT auth) — before Plan 2
 4. Plan 3, Phase D (dual auth bridge) — before Plan 2, Phase 12
 5. Plan 3, Phase E (actuator) — before Plan 2, Phase 19
 6. Plan 3, Phase F (storage abstraction) — before Plan 2, Phase 20
-7. Plan 3, Phase G (verification) — after all above
-8. Plan 2, Phases 12–22 (new features)
+7. Plan 3, Phase G (CORS & Caddy) — before Plan 2, Phase 15
+8. Plan 3, Phase H (logging & Sentry) — before Plan 2, Phase 18
+9. Plan 3, Phase I (resilience) — before Plan 2, Phase 14
+10. Plan 3, Phase J (data management) — before Plan 2, Phase 18
+11. Plan 3, Phase K (profiles & secrets) — before prod deployment
+12. Plan 3, Phase L (CI/CD) — as early as possible (amplifies all other phases)
+13. Plan 3, Phase M (documentation) — after all features
+14. Plan 3, Phase N (final verification) — last
+15. Plan 2, Phases 12–22 (new features)
 
 ---
 
@@ -493,5 +974,12 @@ This plan establishes the foundation that Plan 2 builds on:
 | D | 4 | Dual auth strategy (JWT + API key bridge) |
 | E | 7 | Actuator — health, probes, info & Prometheus metrics |
 | F | 4 | Storage abstraction |
-| G | 5 | Final verification & documentation |
-| **Total** | **42** | |
+| G | 3 | CORS & Caddy reverse proxy with HTTPS |
+| H | 5 | Logging (text + JSON), Grafana Loki, Sentry |
+| I | 5 | Resilience — graceful shutdown, timeouts, circuit breaker |
+| J | 4 | Data management — backups, retention, pagination |
+| K | 4 | Environment profiles & Docker Secrets |
+| L | 3 | CI/CD with GitHub Actions |
+| M | 3 | Documentation (README ru/en, architecture diagram) |
+| N | 5 | Final verification |
+| **Total** | **69** | |

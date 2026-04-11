@@ -128,7 +128,7 @@ A feature is complete when:
 
 Single Spring Boot 3.2.5 / Java 17 service migrating from flat layered to hexagonal architecture:
 
-- **REST API** (4 endpoints: ask, feedback CRUD, intro text)
+- **REST API** (3 endpoints: ask, feedback CRUD)
 - **RAG pipeline** (query analysis → document retrieval → prompt building → LLM call)
 - **Input validation** (3-stage filter chain: format, language, domain relevance)
 - **In-memory vector store** (Spring AI `SimpleVectorStore` with custom page-index extension)

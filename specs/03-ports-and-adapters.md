@@ -53,14 +53,6 @@ public interface GetFeedbackUseCase {
 }
 ```
 
-#### GetBotIntroUseCase
-
-```java
-public interface GetBotIntroUseCase {
-    String getIntroText();
-}
-```
-
 ### 6.2 Outbound Ports
 
 Outbound ports define what the domain **needs** from infrastructure. They are implemented by outbound adapters.
@@ -200,7 +192,6 @@ The web adapter translates HTTP requests into use case calls and domain results 
 |---------|------|-------------------|----------|
 | `BotQueryControllerAdapter` | `adapter/in/web/` | `AskQuestionUseCase`, `QuestionWebMapper` | POST `/api/v1/ask` |
 | `BotFeedbackControllerAdapter` | `adapter/in/web/` | `SaveFeedbackUseCase`, `GetFeedbackUseCase`, `FeedbackWebMapper`, `IdentityProviderPort` | POST/GET `/api/v1/botfeedback` |
-| `BotIntroControllerAdapter` | `adapter/in/web/` | `GetBotIntroUseCase` | GET `/api/v1/bot/intro` |
 
 **Integration tests (Phase 8):**
 
@@ -229,8 +220,6 @@ All 7 outbound adapters are implemented. Each wraps an existing infrastructure s
 | `feedbackService` | `FeedbackService` | `FeedbackPersistencePort` |
 | `saveFeedbackUseCase` | `SaveFeedbackUseCase` | `FeedbackService` (delegates) |
 | `getFeedbackUseCase` | `GetFeedbackUseCase` | `FeedbackService` (delegates) |
-
-`BotIntroAdapter` (`adapter/in/config/BotIntroAdapter.java`) is a `@Component` implementing `GetBotIntroUseCase` by reading `BotProperties.introText`.
 
 Outbound adapters are auto-discovered via `@Component` scanning.
 

@@ -720,3 +720,59 @@ The hexagonal architecture migration is **complete**. The codebase now follows c
 - Observability (metrics, tracing, alerting)
 - LLM streaming
 - Multi-client support
+
+---
+
+## Post-Migration Cleanup & Infrastructure (2026-04-11)
+
+Following the completion of hexagonal migration, additional cleanup and Docker infrastructure work was completed:
+
+### Phase A: Code Cleanup
+
+**Status:** ✅ COMPLETE (2026-04-11)
+
+**Changes:**
+- Removed BotIntro endpoint stack (6 files deleted):
+  - `GetBotIntroUseCase.java` — inbound port
+  - `BotIntroControllerAdapter.java` — REST controller
+  - `IntroResponse.java` — DTO
+  - `BotIntroAdapter.java` — config adapter
+  - `BotProperties.java` — configuration properties
+  - `BotIntroControllerAdapterTest.java` — test
+- Removed `bot.intro-text` configuration
+- Updated OpenAPI spec to remove `/api/v1/bot/intro` endpoint
+- Updated documentation (README, specs, CHANGELOG)
+
+**Result:** API reduced from 4 endpoints to 3 endpoints. Codebase cleaner with unused features removed.
+
+### Phase B: Docker Infrastructure
+
+**Status:** ✅ COMPLETE (2026-04-11)
+
+**Files Created:**
+- `Dockerfile` — Multi-stage build (JDK 17 for build, JRE 17 for runtime)
+- `docker-compose.yml` — PostgreSQL 15.8 for local development
+- `docker-compose.prod.yml` — Production deployment config with app service
+- `.dockerignore` — Build context optimization
+- `application-prod.yml` — Production security configuration
+
+**Security Improvements:**
+- Hardcoded test API key changed to `${TEST_API_KEY:-test-key}`
+- Default password fallback removed (now requires `DB_PASSWORD`)
+- Pinned PostgreSQL version: `postgres:15.8-alpine`
+- Added resource limits for production containers
+- Actuator endpoints restricted in production profile
+
+**Dockerfile Improvements:**
+- Added `RUN chmod +x mvnw` for Windows filesystem compatibility
+- Added `MAVEN_OPTS="-Xmx512m"` for build memory limits
+- Installed `curl` for health checks
+- Fixed JAR copy wildcard pattern
+- Tests run in CI, not during image build (`-DskipTests`)
+
+**Build Configuration:**
+- Added `maven-failsafe-plugin` for integration test separation
+- `mvn test` — runs only unit tests (`*Test.java`)
+- `mvn verify` — runs all tests including integration (`*IT.java`)
+
+**Result:** Production-ready Docker infrastructure with security hardening.

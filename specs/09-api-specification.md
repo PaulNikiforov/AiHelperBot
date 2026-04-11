@@ -50,15 +50,6 @@ Response (200): FeedbackResponse
 Response (404): { "errorCode": "300000", "message": "Bot feedback not found" }
 ```
 
-#### Bot Intro
-
-```
-GET /api/v1/bot/intro
-X-API-Key: ahb_...
-
-Response (200): { "introText": "Hello! I'm the AI Helper Bot..." }
-```
-
 ### 17.2 Common Error Response Format
 
 ```json
